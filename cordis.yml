@@ -1,0 +1,73 @@
+# cc-tui interactive front door over the agent-spine bundle.
+# Run with: sh install.sh --full, then dsh --config ~/.dsh-cc/cordis.yml (or dsh-cc.cmd)
+# Requires DEEPSEEK_API_KEY; a terminal TTY is mandatory.
+
+- id: cc-tui
+  name: '@dsh-external/dsh-cc-tui'
+  config:
+    provider: deepseek-official
+    # Startup display seed for the header/statusline; the live value from
+    # request headers replaces it after the first turn. Keep in sync with
+    # the adapter's reasoningEffort below.
+    effort: max
+    #  feeds the chosen session id through this env var.
+    sessionId: !!js process.env.DSH_CC_RESUME_SESSION ?? undefined
+
+# The DeepSeek adapter. Shipped default: full thinking at max effort.
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    apiKey: !!js process.env.DEEPSEEK_API_KEY
+    baseURL: !!js process.env.DEEPSEEK_BASE_URL
+    thinking: enabled
+    reasoningEffort: max
+
+# Managed child-process groups for the bash executor.
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: bash
+  name: '@deepseek-ai/dsh-bash-local'
+  config:
+    cwd: !!js process.cwd()
+    timeoutMs: 60000
+
+# Filesystem service: `@` completion lists the session cwd through it.
+- id: fs
+  name: '@deepseek-ai/dsh-fs-local'
+
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    persona: !!js process.env.CC_TUI_PERSONA ?? 'You are a coding agent.'
+    workspaceContext: false
+    skills:
+      enabled: false
+    toolBash:
+      enableRunInBackground: false
+    toolTasks: false
+
+# Durable session log (DSH's own persistence seam): /resume and rewind both
+# rely on this backend writing every session/event. Root defaults under the
+# user home so sessions survive across terminals (Windows: USERPROFILE).
+- id: sessions
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js process.env.DSH_CC_SESSION_ROOT ?? (process.env.USERPROFILE ?? process.env.HOME) + '/.dsh-cc/sessions'
+
+- id: session-checkpoints
+  name: '@deepseek-ai/dsh-session-checkpoint-policy'
+
+# Token accounting + manual session compaction (/compact).
+- id: token-meter
+  name: '@deepseek-ai/dsh-token-meter'
+
+- id: compact
+  name: '@deepseek-ai/dsh-compact-basic'
+  config:
+    # DeepSeek advertises a 1M context window, so the 80% default threshold
+    # would never make manual /compact useful. Default 20% (200k tokens)
+    # with a 5% retained tail; both are overridable for tests and must keep
+    # retainRatio < thresholdRatio (BasicCompactConfig validates this).
+    thresholdRatio: !!js parseFloat(process.env.CC_TUI_COMPACT_RATIO ?? '0.2')
+    retainRatio: !!js parseFloat(process.env.CC_TUI_COMPACT_RETAIN ?? '0.05')

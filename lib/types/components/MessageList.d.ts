@@ -1,0 +1,28 @@
+import React from 'react';
+import type { ChatRow } from '../channel.js';
+import type { DOMElement } from '../ink/dom.js';
+export declare function MessageList({ rows, expanded, expandedRows, selectedId, onToggleRow, model, showAll, onToggleAll, thinkingVisible, registerRowRef, }: {
+    rows: readonly ChatRow[];
+    expanded: boolean;
+    expandedRows: ReadonlySet<number>;
+    selectedId: number | null;
+    onToggleRow(rowId: number): void;
+    model: string;
+    showAll: boolean;
+    onToggleAll(): void;
+    thinkingVisible?: boolean;
+    /** Transcript search: register each row's DOM element for scroll-to-match. */
+    registerRowRef?(rowId: number, el: DOMElement | null): void;
+}): React.JSX.Element;
+/**
+ * The header block pinned above the transcript: the DeepSeek pixel whale
+ * with the wordmark, tagline, model/effort and cwd (`LogoV2`), plus the
+ * welcome line. It scrolls away with the transcript once the conversation
+ * fills the viewport (Claude Code shows its ✦ logo in the same slot).
+ */
+export declare function LogoHeader({ model, effort, cwd, }: {
+    model: string;
+    effort?: string | undefined;
+    cwd: string;
+}): React.ReactNode;
+//# sourceMappingURL=MessageList.d.ts.map
