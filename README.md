@@ -133,7 +133,7 @@ compaction-basic（`/compact`）以及 dsh-working-activity（工作状态行，
 | `?` | 快捷键菜单 |
 | `Shift+↑` | 消息选择模式（Enter 展开单条） |
 
-**鼠标（`fullscreen: true` 全屏模式，cordis.yml 默认开启）**
+**鼠标（`fullscreen: true` 全屏模式；默认关，profile 补丁层覆盖开启）**
 
 | 操作 | 功能 |
 |---|---|
