@@ -43,6 +43,7 @@ export type DOMElement = {
     scrollViewportTop?: number;
     scrollPrevMax?: number;
     stickyScroll?: boolean;
+    onStickyRestore?: () => void;
     scrollAnchor?: {
         el: DOMElement;
         offset: number;

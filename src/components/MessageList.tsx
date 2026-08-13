@@ -53,6 +53,8 @@ export function MessageList({
   registerRowRef,
   scrollHandle,
   forceMountRowId,
+  newSinceRowId,
+  onUnseenCount,
 }: {
   rows: readonly ChatRow[]
   expanded: boolean
@@ -72,6 +74,11 @@ export function MessageList({
   scrollHandle?: ScrollBoxHandle | null
   /** Row that must be mounted this pass (seek target for scrollToElement). */
   forceMountRowId?: number | null
+  /** "Seen up to" anchor for the new-messages pill: rows with id greater
+   *  than this are new. Null when pinned to the bottom (nothing unseen). */
+  newSinceRowId?: number | null
+  /** Reports how many new rows still sit below the viewport bottom edge. */
+  onUnseenCount?: (count: number) => void
 }) {
   const hiddenCount = rows.length - MAX_RENDERED_ROWS
   // The thinking filter runs BEFORE virtualization so window indices line up.
@@ -176,6 +183,27 @@ export function MessageList({
   const topPad = offsets[start] ?? 0
   const mountedBottom = end < visibleRows.length ? offsets[end] : total
   const bottomPad = total - mountedBottom
+
+  // New-messages pill count: rows past the seen-anchor whose top edge is
+  // still below the viewport bottom. Same rows-space math as the window
+  // (offsets are rows-space, scrollTop content-space — subtract the header
+  // base). Decrements as the user scrolls down through the new rows; 0 once
+  // every new row has appeared on screen. Reported post-commit (parent
+  // setState with an unchanged value is a React no-op, so the per-render
+  // effect only re-renders on actual count changes).
+  let unseenCount = 0
+  if (newSinceRowId !== null && newSinceRowId !== undefined) {
+    const firstNew = visibleRows.findIndex(row => row.id > newSinceRowId)
+    if (firstNew !== -1) {
+      const seenBottom = scrollTop + viewport - base
+      for (let i = firstNew; i < visibleRows.length; i++) {
+        if (offsets[i]! >= seenBottom) unseenCount++
+      }
+    }
+  }
+  React.useEffect(() => {
+    onUnseenCount?.(unseenCount)
+  })
 
   // Post-commit: measure mounted rows, derive the content-space base from
   // the first mounted row's Yoga top, and clamp render-time scrollTop to the

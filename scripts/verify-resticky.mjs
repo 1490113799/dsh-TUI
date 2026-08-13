@@ -79,6 +79,11 @@ async function run() {
   await sleep(400)
   check('scrollBy up breaks sticky', scrollHandle?.isSticky() === false, `sticky=${scrollHandle?.isSticky()}`)
 
+  // React-side subscriber (mirrors Chat's useSyncExternalStore): the
+  // renderer-side sticky restore must notify, or the UI snapshot stays stale.
+  let notifyCount = 0
+  const unsubscribe = scrollHandle.subscribe(() => { notifyCount++ })
+
   // 2. wheel down past the bottom, then a no-growth re-render
   scrollHandle.scrollBy(999)
   await sleep(400)
@@ -87,6 +92,8 @@ async function run() {
   await sleep(400)
   check('wheel to bottom lands at maxScroll', landed === 36, `scrollTop=${landed}`)
   check('no-growth frame at bottom re-pins sticky', scrollHandle?.isSticky() === true, `sticky=${scrollHandle?.isSticky()}`)
+  check('sticky restore notifies React subscribers', notifyCount > 0, `notifyCount=${notifyCount}`)
+  unsubscribe()
 
   // 3. control: partial scroll down must NOT re-pin
   scrollHandle.scrollBy(-10)

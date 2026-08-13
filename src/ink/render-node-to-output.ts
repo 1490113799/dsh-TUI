@@ -849,6 +849,7 @@ function renderNodeToOutput(
             scrollTopBeforeFollow >= prevMaxScroll
           ) {
             node.stickyScroll = true
+            node.onStickyRestore?.()
           }
         }
         const followDelta = (node.scrollTop ?? 0) - scrollTopBeforeFollow
@@ -917,6 +918,22 @@ function renderNodeToOutput(
         // only after clamp so a wasted no-op frame isn't scheduled.
         if (scrollTop !== cur) node.pendingScrollDelta = undefined
         if (node.pendingScrollDelta !== undefined) scrollDrainNode = node
+        // A manual scroll that lands exactly on the bottom re-pins sticky
+        // IMMEDIATELY on this frame — the follow-block restore above only
+        // fires when a later frame happens, but an idle stream (turn done,
+        // no ticks) produces none, leaving sticky broken and the
+        // new-messages pill stuck at its peak count. Only restores a flag
+        // that was explicitly broken by scrollTo/scrollBy (=== false);
+        // shrink-artifact frames and still-draining scrolls are excluded.
+        if (
+          !shrunk &&
+          node.stickyScroll === false &&
+          node.pendingScrollDelta === undefined &&
+          scrollTop >= maxScroll
+        ) {
+          node.stickyScroll = true
+          node.onStickyRestore?.()
+        }
         scrollTop = clamped
 
         if (content && contentYoga) {

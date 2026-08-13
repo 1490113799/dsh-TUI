@@ -2,7 +2,7 @@ import React from 'react';
 import { type ScrollBoxHandle } from '../ui.js';
 import type { ChatRow } from '../channel.js';
 import type { DOMElement } from '../ink/dom.js';
-export declare function MessageList({ rows, expanded, expandedRows, selectedId, onToggleRow, model, showAll, onToggleAll, onLoadOlder, thinkingVisible, registerRowRef, scrollHandle, forceMountRowId, }: {
+export declare function MessageList({ rows, expanded, expandedRows, selectedId, onToggleRow, model, showAll, onToggleAll, onLoadOlder, thinkingVisible, registerRowRef, scrollHandle, forceMountRowId, newSinceRowId, onUnseenCount, }: {
     rows: readonly ChatRow[];
     expanded: boolean;
     expandedRows: ReadonlySet<number>;
@@ -21,6 +21,11 @@ export declare function MessageList({ rows, expanded, expandedRows, selectedId, 
     scrollHandle?: ScrollBoxHandle | null;
     /** Row that must be mounted this pass (seek target for scrollToElement). */
     forceMountRowId?: number | null;
+    /** "Seen up to" anchor for the new-messages pill: rows with id greater
+     *  than this are new. Null when pinned to the bottom (nothing unseen). */
+    newSinceRowId?: number | null;
+    /** Reports how many new rows still sit below the viewport bottom edge. */
+    onUnseenCount?: (count: number) => void;
 }): React.JSX.Element;
 /**
  * The header block pinned above the transcript: the DeepSeek pixel whale

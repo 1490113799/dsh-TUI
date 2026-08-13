@@ -187,20 +187,26 @@ export function Chat({
     () => (handle ? handle.isSticky() : true),
   )
 
-  // "N new messages" pill: messages arriving while the user scrolled up.
-  const baseAtScrollAway = React.useRef<number | null>(null)
+  // "N new messages" pill: new rows whose top edge is still BELOW the
+  // viewport bottom. The count decrements as the user scrolls down through
+  // them and hits 0 (pill hides) once every new row has been on screen —
+  // no need to wait for the exact-bottom sticky restore. Chat anchors the
+  // "seen up to" point by ROW ID (stable across loadOlder prepends, unlike
+  // a rows.length index); MessageList owns the row offsets, so it computes
+  // how many rows past that anchor lie below the viewport and reports it.
+  const lastSeenRowIdRef = React.useRef<number | null>(null)
+  const [unseenCount, setUnseenCount] = React.useState(0)
   React.useEffect(() => {
     if (isSticky) {
-      baseAtScrollAway.current = null
-    } else if (baseAtScrollAway.current === null) {
-      baseAtScrollAway.current = channel.rows.length
+      lastSeenRowIdRef.current = null
+      setUnseenCount(0)
+    } else if (lastSeenRowIdRef.current === null) {
+      lastSeenRowIdRef.current = channel.rows.length
+        ? channel.rows[channel.rows.length - 1]!.id
+        : -1
     }
-  }, [isSticky, channel.rows.length])
-  const newCount =
-    baseAtScrollAway.current === null
-      ? 0
-      : Math.max(0, channel.rows.length - baseAtScrollAway.current)
-  const showPill = !isSticky && newCount > 0
+  }, [isSticky, channel.rows])
+  const showPill = !isSticky && unseenCount > 0
 
   // Idle Ctrl+C: first press arms an exit, second press exits (CC's
   // double-press semantics, simplified). Under Windows ConPTY the key
@@ -1136,6 +1142,8 @@ export function Chat({
           registerRowRef={registerRowRef}
           scrollHandle={handle}
           forceMountRowId={forceMountRowId}
+          newSinceRowId={isSticky ? null : lastSeenRowIdRef.current}
+          onUnseenCount={setUnseenCount}
         />
       </ScrollBox>
       {/* Bottom chrome (pill, spinners, dialogs, prompt, statusline): never
@@ -1144,7 +1152,7 @@ export function Chat({
       <Box flexDirection="column" flexShrink={0}>
         {showPill && (
           <NewMessagesPill
-            count={newCount}
+            count={unseenCount}
             onClick={() => handle?.scrollToBottom()}
           />
         )}

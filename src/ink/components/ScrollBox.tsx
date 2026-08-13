@@ -215,7 +215,12 @@ function ScrollBox({
   // commit, which is too late for the first frame.
   return <ink-box ref={el => {
     domRef.current = el;
-    if (el) el.scrollTop ??= 0;
+    if (el) {
+      el.scrollTop ??= 0;
+      // Renderer-side sticky restores (positional re-pin at the bottom)
+      // must reach React subscribers too — see dom.ts onStickyRestore.
+      el.onStickyRestore = notify;
+    }
   }} style={{
     flexWrap: 'nowrap',
     flexDirection: style.flexDirection ?? 'row',
