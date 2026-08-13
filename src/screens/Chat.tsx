@@ -1105,7 +1105,7 @@ export function Chat({
           }}
         />
       )}
-      <ScrollBox ref={setHandle} flexGrow={1} flexShrink={1} stickyScroll>
+      <ScrollBox ref={setHandle} flexDirection="column" flexGrow={1} flexShrink={1} stickyScroll>
         <LogoHeader
           model={channel.model}
           effort={channel.reasoningEffort}
@@ -1138,136 +1138,141 @@ export function Chat({
           forceMountRowId={forceMountRowId}
         />
       </ScrollBox>
-      {showPill && (
-        <NewMessagesPill
-          count={newCount}
-          onClick={() => handle?.scrollToBottom()}
-        />
-      )}
-      {channel.working &&
-        (channel.activityEnabled &&
-        channel.workingActivity !== undefined &&
-        channel.workingActivity.line !== '' &&
-        channel.workingActivity.phase !== 'idle' ? (
-          // The working-activity line REPLACES the CC random-verb spinner
-          // while a turn runs: the plugin's live line (thinking copy /
-          // running tool / narration) is the status, with the spinner
-          // slot's token counter preserved as a suffix. Only real activity
-          // data replaces the spinner — before the first event, or with
-          // `activity: false`, the classic spinner still renders. The line
-          // hugs the left edge (no padding) so the self-narration reads as
-          // part of the transcript, aligned with the `❯` prompt below.
-            <Box marginTop={1}>
-              <ActivityLine
-                activity={channel.workingActivity}
-                activityFrames={channel.activityFrames}
-                warnPct={activityWarnPct}
-                warnDanger={activityWarnPct !== undefined && activityWarnPct >= 95}
-                suffix={` · ↓ ${channel.responseChars} tokens`}
+      {/* Bottom chrome (pill, spinners, dialogs, prompt, statusline): never
+          let flex shrink squeeze these fixed-height rows — the ScrollBox
+          above absorbs all overflow (it is the scroll container). */}
+      <Box flexDirection="column" flexShrink={0}>
+        {showPill && (
+          <NewMessagesPill
+            count={newCount}
+            onClick={() => handle?.scrollToBottom()}
+          />
+        )}
+        {channel.working &&
+          (channel.activityEnabled &&
+          channel.workingActivity !== undefined &&
+          channel.workingActivity.line !== '' &&
+          channel.workingActivity.phase !== 'idle' ? (
+            // The working-activity line REPLACES the CC random-verb spinner
+            // while a turn runs: the plugin's live line (thinking copy /
+            // running tool / narration) is the status, with the spinner
+            // slot's token counter preserved as a suffix. Only real activity
+            // data replaces the spinner — before the first event, or with
+            // `activity: false`, the classic spinner still renders. The line
+            // hugs the left edge (no padding) so the self-narration reads as
+            // part of the transcript, aligned with the `❯` prompt below.
+              <Box marginTop={1}>
+                <ActivityLine
+                  activity={channel.workingActivity}
+                  activityFrames={channel.activityFrames}
+                  warnPct={activityWarnPct}
+                  warnDanger={activityWarnPct !== undefined && activityWarnPct >= 95}
+                  suffix={` · ↓ ${channel.responseChars} tokens`}
+                />
+              </Box>
+            ) : (
+              <WorkingSpinner
+                mode={channel.spinnerMode}
+                hasActiveTools={channel.activeToolCount > 0}
+                responseLengthRef={responseLengthRef}
+                loadingStartTimeRef={loadingStartTimeRef}
+                totalPausedMsRef={totalPausedMsRef}
+                pauseStartTimeRef={pauseStartTimeRef}
+                thinkingStatus={thinkingStatus}
               />
-            </Box>
-          ) : (
-            <WorkingSpinner
-              mode={channel.spinnerMode}
-              hasActiveTools={channel.activeToolCount > 0}
-              responseLengthRef={responseLengthRef}
-              loadingStartTimeRef={loadingStartTimeRef}
-              totalPausedMsRef={totalPausedMsRef}
-              pauseStartTimeRef={pauseStartTimeRef}
-              thinkingStatus={thinkingStatus}
+            ))}
+        {thinkingOpen && (
+          <ThinkingToggle
+            currentValue={thinkingVisible}
+            focusIndex={thinkingFocus}
+            confirmationPending={thinkingConfirm}
+          />
+        )}
+        {resumePickerOpen && resumeSessions.length > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            <ResumePicker
+              sessions={resumeSessions}
+              focusIndex={resumeIndex}
+              currentSessionId={channel.agentId}
             />
-          ))}
-      {thinkingOpen && (
-        <ThinkingToggle
-          currentValue={thinkingVisible}
-          focusIndex={thinkingFocus}
-          confirmationPending={thinkingConfirm}
-        />
-      )}
-      {resumePickerOpen && resumeSessions.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <ResumePicker
-            sessions={resumeSessions}
-            focusIndex={resumeIndex}
-            currentSessionId={channel.agentId}
-          />
-        </Box>
-      )}
-      {modelPickerOpen && (
-        <Box flexDirection="column" marginTop={1}>
-          {models.length === 0 ? (
-            <ModelPickerLoading />
-          ) : (
-            <ModelPicker
-              models={models}
-              focusIndex={modelIndex}
-              currentModel={`${channel.provider}/${channel.model}`}
+          </Box>
+        )}
+        {modelPickerOpen && (
+          <Box flexDirection="column" marginTop={1}>
+            {models.length === 0 ? (
+              <ModelPickerLoading />
+            ) : (
+              <ModelPicker
+                models={models}
+                focusIndex={modelIndex}
+                currentModel={`${channel.provider}/${channel.model}`}
+              />
+            )}
+          </Box>
+        )}
+        {activityPickerOpen && (
+          <Box flexDirection="column" marginTop={1}>
+            <ActivityPicker
+              focusIndex={activityIndex}
+              currentPreset={channel.activityFrames}
             />
-          )}
-        </Box>
-      )}
-      {activityPickerOpen && (
-        <Box flexDirection="column" marginTop={1}>
-          <ActivityPicker
-            focusIndex={activityIndex}
-            currentPreset={channel.activityFrames}
+          </Box>
+        )}
+        {themePickerOpen && (
+          <Box flexDirection="column" marginTop={1}>
+            <ThemePicker focusIndex={themeIndex} currentTheme={themeName} />
+          </Box>
+        )}
+        {historyOpen && (
+          <Box flexDirection="column" marginTop={1}>
+            <HistorySearchDialog
+              query={historyQuery}
+              cursorOffset={historyCursor}
+              matches={historyMatches}
+              focusIndex={historyFocus}
+            />
+          </Box>
+        )}
+        {rewindOpen && (
+          <Box flexDirection="column" marginTop={1}>
+            <RewindPicker
+              rows={rewindRows}
+              focusIndex={rewindIndex}
+              confirmRow={rewindConfirm}
+            />
+          </Box>
+        )}
+        {searchOpen && <TranscriptSearchBar query={searchQuery} cursorOffset={searchCursor} count={searchCount} current={searchCurrent} />}
+        <GoalTodoPanel channel={channel} />
+        {questionSnapshot !== null && (
+          <AskUserQuestionPanel
+            key={questionSnapshot.key}
+            question={questionSnapshot.question}
+            position={questionSnapshot.position}
+            total={questionSnapshot.total}
+            answered={questionSnapshot.answered}
+            onAnswer={selection => questionStore.answerCurrent(selection)}
+            onCancel={() => questionStore.cancelCurrent()}
           />
-        </Box>
-      )}
-      {themePickerOpen && (
-        <Box flexDirection="column" marginTop={1}>
-          <ThemePicker focusIndex={themeIndex} currentTheme={themeName} />
-        </Box>
-      )}
-      {historyOpen && (
-        <Box flexDirection="column" marginTop={1}>
-          <HistorySearchDialog
-            query={historyQuery}
-            cursorOffset={historyCursor}
-            matches={historyMatches}
-            focusIndex={historyFocus}
+        )}
+        {questionSnapshot === null && (
+          <PromptInput
+            channel={channel}
+            helpOpen={helpOpen}
+            onToggleHelp={() =>{  setHelpOpen(previous => !previous) }}
+            onRunCommand={runCommand}
+            selectionActive={promptSelectionActive}
+            fillText={historyFill}
+            onFillConsumed={() =>{  setHistoryFill(null) }}
+            onRewindRequest={openRewind}
           />
-        </Box>
-      )}
-      {rewindOpen && (
-        <Box flexDirection="column" marginTop={1}>
-          <RewindPicker
-            rows={rewindRows}
-            focusIndex={rewindIndex}
-            confirmRow={rewindConfirm}
-          />
-        </Box>
-      )}
-      {searchOpen && <TranscriptSearchBar query={searchQuery} cursorOffset={searchCursor} count={searchCount} current={searchCurrent} />}
-      <GoalTodoPanel channel={channel} />
-      {questionSnapshot !== null && (
-        <AskUserQuestionPanel
-          key={questionSnapshot.key}
-          question={questionSnapshot.question}
-          position={questionSnapshot.position}
-          total={questionSnapshot.total}
-          answered={questionSnapshot.answered}
-          onAnswer={selection => questionStore.answerCurrent(selection)}
-          onCancel={() => questionStore.cancelCurrent()}
-        />
-      )}
-      {questionSnapshot === null && (
-        <PromptInput
+        )}
+        <StatusLine
           channel={channel}
+          selectionActive={selectionActive}
           helpOpen={helpOpen}
-          onToggleHelp={() =>{  setHelpOpen(previous => !previous) }}
-          onRunCommand={runCommand}
-          selectionActive={promptSelectionActive}
-          fillText={historyFill}
-          onFillConsumed={() =>{  setHistoryFill(null) }}
-          onRewindRequest={openRewind}
         />
-      )}
-      <StatusLine
-        channel={channel}
-        selectionActive={selectionActive}
-        helpOpen={helpOpen}
-      />
+      </Box>
     </Box>
   )
 }
