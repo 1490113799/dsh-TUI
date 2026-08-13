@@ -21,9 +21,11 @@
 # at max effort, key and base URL from the launching environment. The base
 # entry defers both to the `llm-deepseek:` settings section; the settings
 # document still overrides these entries per request when it carries one.
+# rc.6 schema key is `apiKeyEnv` (credential-ref env var NAME, default
+# DEEPSEEK_API_KEY); the old snapshot's `apiKey` key no longer exists.
 - id: llm-deepseek
   config:
-    apiKey: !!js process.env.DEEPSEEK_API_KEY
+    apiKeyEnv: 'DEEPSEEK_API_KEY'
     baseURL: !!js process.env.DEEPSEEK_BASE_URL
     thinking: enabled
     reasoningEffort: max
@@ -98,6 +100,10 @@
       name: 'dsh-cc-tui'
       config:
         provider: deepseek-official
+        # Alt-screen fullscreen (CC 同款): 应用内鼠标选区（选择即复制, OSC 52 +
+        # wl-copy/xclip/xsel 兜底）、滚轮滚动、双击选词/三击选行。profile 用户层
+        # cordis.patch.yml 里同 id 覆盖整行 config 可关（fullscreen: false）。
+        fullscreen: true
         # Startup display seed for the header/statusline; the live value from
         # request headers replaces it after the first turn. Keep in sync with
         # the adapter's reasoningEffort below.
@@ -113,9 +119,13 @@
       config:
         path: !!js process.env.DSH_CC_SESSION_ROOT ?? (process.env.USERPROFILE ?? process.env.HOME) + '/.dsh-cc/sessions.sqlite'
 
-# working-activity 的 cc-tui 特定配置：500ms 刷新（比默认 2000ms 快，
-# 让 status-line 计时器平滑）。working-activity bundle 先 insert 自己，
-# cc-tui 再 override 其 config。
-- id: working-activity
-  config:
-    publishIntervalMs: 500
+    # Live working-line data source (thinking copy / running tool / turn
+    # summary). dsh-working-activity ships as a plain npm dependency of
+    # dsh-cc-tui — transitive deps never enter dsh.profile.bundles — so this
+    # layer inserts the row itself instead of relying on a separate bundle.
+    # publishIntervalMs 500 keeps the status-line timers ticking smoothly
+    # (default 2000ms).
+    - id: working-activity
+      name: 'dsh-working-activity'
+      config:
+        publishIntervalMs: 500

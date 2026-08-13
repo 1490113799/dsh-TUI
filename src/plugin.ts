@@ -8,10 +8,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { Config } from './index.js'
 import { createChannel } from './channel.js'
 import { QuestionStore } from './questions.js'
+import { registerPackagedSkills } from './packaged-skills.js'
 import { readActivityFrames } from './activityPrefs.js'
 import { writeResumeTarget } from './sessionHistory.js'
 import { Chat } from './screens/Chat.js'
-import { render, ThemeProvider } from './ui.js'
+import { render, ThemeProvider, AlternateScreen } from './ui.js'
 
 /**
  * Claude Code style interactive TUI front door for DeepSeek Harness agents.
@@ -39,6 +40,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const userQuestions = ctx.get('userQuestions') ?? new UserQuestionService(ctx)
   ctx.plugin(toolAskUser)
   const questionStore = new QuestionStore()
+  // Packaged skills (/audit, /bug, …): contribute them through the host's
+  // skill registry so they resolve with zero manual copying.
+  registerPackagedSkills(ctx)
   userQuestions.registerProvider({
     ask: request => questionStore.ask(request),
   })
@@ -62,6 +66,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     activityFrames: config.activityFrames ?? readActivityFrames() ?? 'claude',
     handle,
   })
+<<<<<<< HEAD
   // Single exit funnel: `/exit`, double Ctrl+C, and external teardown all
   // land here. unmount() restores the terminal (cursor, raw mode, mouse
   // tracking); the explicit newlines afterwards keep the shell prompt from
@@ -102,14 +107,19 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     disposeRootAndExit(ctx, 0)
   }
 
+  const chat = React.createElement(Chat, {
+    channel,
+    questionStore,
+    onExit: () => handleExit(),
+  })
+  // fullscreen: wrap the tree in <AlternateScreen> (DEC 1049 + SGR mouse
+  // tracking), which turns on in-app text selection (copy-on-select via
+  // useCopyOnSelect), wheel scroll, and click/hover hit-testing. Inline
+  // mode leaves the mouse to the terminal emulator's native selection.
   const tree = React.createElement(
     ThemeProvider,
     null,
-    React.createElement(Chat, {
-      channel,
-      questionStore,
-      onExit: () => handleExit(),
-    }),
+    config.fullscreen ? React.createElement(AlternateScreen, null, chat) : chat,
   )
   instance = await render(tree, { exitOnCtrlC: false })
 

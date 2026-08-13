@@ -13,6 +13,10 @@
   name: 'dsh-cc-tui'
   config:
     provider: deepseek-official
+    # Alt-screen fullscreen (CC 同款): 应用内鼠标选区（选择即复制, OSC 52 +
+    # wl-copy/xclip/xsel 兜底）、滚轮滚动、双击选词/三击选行。false 则退回
+    # inline 渲染, 鼠标交给终端模拟器原生选择。
+    fullscreen: true
     # Startup display seed for the header/statusline; the live value from
     # request headers replaces it after the first turn. Keep in sync with
     # the adapter's reasoningEffort below.
@@ -21,10 +25,13 @@
     sessionId: !!js process.env.DSH_CC_RESUME_SESSION ?? undefined
 
 # The DeepSeek adapter. Shipped default: full thinking at max effort.
+# rc.6 schema key is `apiKeyEnv` (a credential-ref env var NAME, default
+# DEEPSEEK_API_KEY), not `apiKey`; the old snapshot's `apiKey` key is
+# dropped by the loader and would never take effect.
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek'
   config:
-    apiKey: !!js process.env.DEEPSEEK_API_KEY
+    apiKeyEnv: 'DEEPSEEK_API_KEY'
     baseURL: !!js process.env.DEEPSEEK_BASE_URL
     thinking: enabled
     reasoningEffort: max
@@ -55,8 +62,12 @@
   name: '@deepseek-ai/dsh-tool-fs'
 
 # The todo_write tool replaces the logged whole list (DSH's todo tool).
+# allowParallelInProgress is REQUIRED (no schema default) — a bare mount
+# fails validation. True matches the official dsh-base bundle value.
 - id: tool-todo
   name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
 
 # Subagents: the registry service, then the spawn/fork backends and the
 # delegation tools (max depth 1 keeps the TUI's tool cards shallow). The
