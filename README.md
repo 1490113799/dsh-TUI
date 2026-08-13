@@ -13,7 +13,7 @@
 
 ## 🎉 官方收录
 
-本插件被 **DeepSeek Harness 官方公众号** 推文收录，作为"内测用户制作的部分插件"展示：
+本插件被 **DeepSeek Harness 官方公众号** 推文收录，作为"内测用户精选插件"展示：
 
 <p align="center">
   <img src="screenshots/wechat-official.png" alt="DeepSeek Harness 官方公众号推文收录 dsh-cc-tui" width="560">
