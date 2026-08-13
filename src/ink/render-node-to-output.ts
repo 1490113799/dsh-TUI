@@ -821,8 +821,16 @@ function renderNodeToOutput(
         // maxScroll and yanks a mid-scroll view to the bottom (opentui #709:
         // content-size changes must not reset the manual-scroll state).
         if (!shrunk) node.scrollPrevMax = maxScroll
+        // Positional at-bottom also fires on NO-GROWTH frames when the
+        // scroll position already sits at maxScroll: a wheel-down that
+        // lands exactly on the bottom re-pins the follow (and restores
+        // stickyScroll below) so the "N new messages" pill clears once the
+        // user scrolls home — otherwise sticky stays broken until the next
+        // content growth, and an idle stream leaves the pill stuck.
         const atBottom =
-          sticky || (grew && scrollTopBeforeFollow >= prevMaxScroll)
+          sticky ||
+          (scrollTopBeforeFollow >= prevMaxScroll &&
+            (grew || scrollTopBeforeFollow >= maxScroll))
         if (atBottom && (node.pendingScrollDelta ?? 0) >= 0 && !shrunk) {
           node.scrollTop = maxScroll
           node.pendingScrollDelta = undefined

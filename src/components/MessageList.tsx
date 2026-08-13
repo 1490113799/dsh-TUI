@@ -155,6 +155,17 @@ export function MessageList({
   let end = start
   while (end < visibleRows.length && offsets[end] < relBottom) end++
   if (sticky || !scrollHandle) end = visibleRows.length
+  // Pinned to bottom: the tail row must stay mounted EVERY pass. The
+  // streaming row's measured height only lands in heightsRef when it
+  // survives mounted across two consecutive commits (useLayoutEffect reads
+  // the previous Yoga pass). If an underestimated `total` ever lets relTop
+  // overshoot it, start=len unmounts everything → content collapses to the
+  // header → follow yanks scrollTop to 0 → next pass remounts all → follow
+  // back to the real bottom: a self-sustaining ping-pong that blanks the
+  // transcript mid-stream.
+  if (sticky && visibleRows.length > 0) {
+    start = Math.min(start, visibleRows.length - 1)
+  }
   if (forceMountRowId !== undefined && forceMountRowId !== null) {
     const idx = visibleRows.findIndex(row => row.id === forceMountRowId)
     if (idx !== -1) {
