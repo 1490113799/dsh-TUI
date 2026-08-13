@@ -1,6 +1,6 @@
-# dsh-cc-tui — Claude Code 风格的全屏交互终端
+# dsh-cc-tui — 仿Anthropic美学风格的全屏交互终端
 
-> **DeepSeek Harness 官方目前还没有终端 TUI（只有 Web UI）——这个项目就是来补位的**：
+> **DeepSeek Harness 官方目前还没有终端 TUI（只有 Web UI） 因此！我制作了这个dsh-cc-tui！：
 > 一个美观且实用的 Claude Code 风格 TUI 插件（cordis 挂载）：像素鲸鱼顶栏、双流光大字、
 > 实时工作状态行、思考流式展开、双击 Esc 时间回溯、蓝白上下文进度条 + TPS 仪表。
 > 零核心改动，纯插件挂载。
