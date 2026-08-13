@@ -15,7 +15,7 @@ import { useSelection } from '../ink/hooks/use-selection.js'
 import { NoSelect } from '../ink/components/NoSelect.js'
 import instances from '../ink/instances.js'
 import { LogoHeader, MessageList } from '../components/MessageList.js'
-import { PromptInput } from '../components/PromptInput.js'
+import { PromptInput, type PromptController } from '../components/PromptInput.js'
 import { GoalTodoPanel } from '../components/GoalTodoPanel.js'
 import { LoadedContextPanel } from '../components/LoadedContextPanel.js'
 import { StatusLine } from './StatusLine.js'
@@ -214,6 +214,9 @@ export function Chat({
   // branch below is the only path; SIGINT is not emitted.
   const exitPendingRef = React.useRef(false)
   const exitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Live view into the prompt's text for the Ctrl+C rule (clears text when
+  // non-empty; the double-press exit only arms on an empty input).
+  const promptControllerRef = React.useRef<PromptController | null>(null)
   const requestExit = () => {
     if (exitPendingRef.current) {
       onExit()
@@ -1073,10 +1076,17 @@ export function Chat({
         event.stopImmediatePropagation()
       }
     } else if (key.ctrl && (input === 'c' || input === 'd')) {
-      // CC's app:exit — ctrl+c interrupts a running turn, or (idle-only)
-      // asks for a second press; ctrl+d is the time-based double press.
+      // CC's app:exit — ctrl+c interrupts a running turn; idle ctrl+c
+      // CLEARS a non-empty prompt (single press) and only arms the
+      // double-press exit when the input is empty; ctrl+d keeps the
+      // time-based double-press exit regardless.
       if (channel.working) {
         channel.cancel()
+      } else if (input === 'c' && promptControllerRef.current?.hasText()) {
+        promptControllerRef.current.clear()
+        // A pending exit arm no longer makes sense once the user is editing.
+        exitPendingRef.current = false
+        if (exitTimerRef.current) clearTimeout(exitTimerRef.current)
       } else {
         requestExit()
       }
@@ -1273,6 +1283,7 @@ export function Chat({
             fillText={historyFill}
             onFillConsumed={() =>{  setHistoryFill(null) }}
             onRewindRequest={openRewind}
+            controllerRef={promptControllerRef}
           />
         )}
         <StatusLine

@@ -42,6 +42,17 @@ function wordBoundaryRight(text: string, cursor: number): number {
  *  maxVisibleLines behavior — the box keeps a stable height). */
 const MAX_VISIBLE_LINES = 5
 
+/**
+ * Imperative handle for the Chat-level Ctrl+C rule: Chat's useInput listener
+ * runs BEFORE this component's (EventEmitter registration order), so Chat
+ * asks the prompt whether it holds text (→ clear it) or not (→ arm the
+ * double-press exit). Populated every render; null while unmounted.
+ */
+export interface PromptController {
+  hasText(): boolean
+  clear(): void
+}
+
 export interface PromptInputProps {
   channel: Channel
   /** Whether the `?` help menu is open (state lives in the Chat screen). */
@@ -63,6 +74,8 @@ export interface PromptInputProps {
   onFillConsumed?(): void
   /** Double-tap Esc with an empty input: open the rewind picker (CC rewind). */
   onRewindRequest?(): void
+  /** Filled with the live controller each render (see PromptController). */
+  controllerRef?: React.RefObject<PromptController | null>
 }
 
 /**
@@ -103,9 +116,25 @@ export function PromptInput({
   fillText,
   onFillConsumed,
   onRewindRequest,
+  controllerRef,
 }: PromptInputProps) {
   const [value, setValue] = React.useState('')
   const [cursor, setCursor] = React.useState(0)
+  // Publish the live controller (fresh closure over `value` every render).
+  // clear() mirrors the double-tap-Esc clear: text + caret reset.
+  React.useEffect(() => {
+    if (!controllerRef) return
+    controllerRef.current = {
+      hasText: () => value.length > 0,
+      clear: () => {
+        setValue('')
+        setCursor(0)
+      },
+    }
+    return () => {
+      controllerRef.current = null
+    }
+  })
   const [selectedCommand, setSelectedCommand] = React.useState(0)
   const history = React.useRef<string[]>([])
   const historyIndex = React.useRef(-1)

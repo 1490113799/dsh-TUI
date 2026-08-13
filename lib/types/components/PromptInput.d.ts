@@ -1,5 +1,15 @@
 import React from 'react';
 import type { Channel } from '../channel.js';
+/**
+ * Imperative handle for the Chat-level Ctrl+C rule: Chat's useInput listener
+ * runs BEFORE this component's (EventEmitter registration order), so Chat
+ * asks the prompt whether it holds text (→ clear it) or not (→ arm the
+ * double-press exit). Populated every render; null while unmounted.
+ */
+export interface PromptController {
+    hasText(): boolean;
+    clear(): void;
+}
 export interface PromptInputProps {
     channel: Channel;
     /** Whether the `?` help menu is open (state lives in the Chat screen). */
@@ -21,6 +31,8 @@ export interface PromptInputProps {
     onFillConsumed?(): void;
     /** Double-tap Esc with an empty input: open the rewind picker (CC rewind). */
     onRewindRequest?(): void;
+    /** Filled with the live controller each render (see PromptController). */
+    controllerRef?: React.RefObject<PromptController | null>;
 }
 /**
  * Claude Code style prompt input: rounded border box (top+bottom borders
@@ -51,5 +63,5 @@ export interface PromptInputProps {
  * working) interrupts the turn and delivers them right away; Ctrl+Enter
  * aborts the turn and sends the current input immediately.
  */
-export declare function PromptInput({ channel, helpOpen, onToggleHelp, onRunCommand, selectionActive, fillText, onFillConsumed, onRewindRequest, }: PromptInputProps): React.JSX.Element;
+export declare function PromptInput({ channel, helpOpen, onToggleHelp, onRunCommand, selectionActive, fillText, onFillConsumed, onRewindRequest, controllerRef, }: PromptInputProps): React.JSX.Element;
 //# sourceMappingURL=PromptInput.d.ts.map
