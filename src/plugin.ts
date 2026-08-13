@@ -11,7 +11,7 @@ import { QuestionStore } from './questions.js'
 import { registerPackagedSkills } from './packaged-skills.js'
 import { readActivityFrames } from './activityPrefs.js'
 import { Chat } from './screens/Chat.js'
-import { render, ThemeProvider } from './ui.js'
+import { render, ThemeProvider, AlternateScreen } from './ui.js'
 
 /**
  * Claude Code style interactive TUI front door for DeepSeek Harness agents.
@@ -65,14 +65,19 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     activityFrames: config.activityFrames ?? readActivityFrames() ?? 'claude',
     handle,
   })
-  const tree = React.createElement(
-    ThemeProvider,
-    null,
-    React.createElement(Chat, {
+  const chat = React.createElement(Chat, {
       channel,
       questionStore,
       onExit: () => { disposeRootAndExit(ctx, 0) },
-    }),
+    })
+  // fullscreen: wrap the tree in <AlternateScreen> (DEC 1049 + SGR mouse
+  // tracking), which turns on in-app text selection (copy-on-select via
+  // useCopyOnSelect), wheel scroll, and click/hover hit-testing. Inline
+  // mode leaves the mouse to the terminal emulator's native selection.
+  const tree = React.createElement(
+    ThemeProvider,
+    null,
+    config.fullscreen ? React.createElement(AlternateScreen, null, chat) : chat,
   )
   const instance = await render(tree, { exitOnCtrlC: false })
 
