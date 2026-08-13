@@ -21,10 +21,13 @@
     sessionId: !!js process.env.DSH_CC_RESUME_SESSION ?? undefined
 
 # The DeepSeek adapter. Shipped default: full thinking at max effort.
+# rc.6 schema key is `apiKeyEnv` (a credential-ref env var NAME, default
+# DEEPSEEK_API_KEY), not `apiKey`; the old snapshot's `apiKey` key is
+# dropped by the loader and would never take effect.
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek'
   config:
-    apiKey: !!js process.env.DEEPSEEK_API_KEY
+    apiKeyEnv: 'DEEPSEEK_API_KEY'
     baseURL: !!js process.env.DEEPSEEK_BASE_URL
     thinking: enabled
     reasoningEffort: max
@@ -55,8 +58,12 @@
   name: '@deepseek-ai/dsh-tool-fs'
 
 # The todo_write tool replaces the logged whole list (DSH's todo tool).
+# allowParallelInProgress is REQUIRED (no schema default) — a bare mount
+# fails validation. True matches the official dsh-base bundle value.
 - id: tool-todo
   name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
 
 # Subagents: the registry service, then the spawn/fork backends and the
 # delegation tools (max depth 1 keeps the TUI's tool cards shallow). The

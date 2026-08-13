@@ -62,7 +62,7 @@ const SKILL_PROMPTS: Readonly<Record<string, string>> = {
   bug: '请使用 bug 技能协助我记录一份完整的 bug 报告（现象、复现步骤、期望行为）。',
   practice: '请使用 practice 技能陪我进行一轮编程练习。',
   review: '请使用 review 技能对当前项目做一次全面的代码评审。',
-  pr_comments: '请使用 pr_comments 技能审查当前分支的拉取请求评论并给出改进建议。',
+  pr_comments: '请使用 pr-comments 技能审查当前分支的拉取请求评论并给出改进建议。',
   'release-notes': '请使用 release-notes 技能为当前项目生成发布说明。',
   'vuln-check': '请使用 vuln-check 技能对当前项目做一次安全漏洞检查。',
 }

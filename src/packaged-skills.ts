@@ -63,9 +63,10 @@ export function registerPackagedSkills(ctx: Context): void {
     if (!description) continue
     try {
       registry.register({ name, description, content, path: file, provider: 'dsh-cc-tui', source: 'bundled' })
-    } catch {
-      // The registry itself warns and ignores duplicates; anything else (bad
-      // name, empty description) is a packaging defect, not a boot blocker.
+    } catch (error) {
+      // The registry itself warns and ignores duplicates; surface anything
+      // else (bad name, empty description) instead of failing the boot.
+      ctx.logger.warn(`packaged skill "${name}" skipped: ${(error as Error).message}`)
     }
   }
 }

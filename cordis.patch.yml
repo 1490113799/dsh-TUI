@@ -21,9 +21,11 @@
 # at max effort, key and base URL from the launching environment. The base
 # entry defers both to the `llm-deepseek:` settings section; the settings
 # document still overrides these entries per request when it carries one.
+# rc.6 schema key is `apiKeyEnv` (credential-ref env var NAME, default
+# DEEPSEEK_API_KEY); the old snapshot's `apiKey` key no longer exists.
 - id: llm-deepseek
   config:
-    apiKey: !!js process.env.DEEPSEEK_API_KEY
+    apiKeyEnv: 'DEEPSEEK_API_KEY'
     baseURL: !!js process.env.DEEPSEEK_BASE_URL
     thinking: enabled
     reasoningEffort: max
