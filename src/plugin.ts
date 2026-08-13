@@ -66,7 +66,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     activityFrames: config.activityFrames ?? readActivityFrames() ?? 'claude',
     handle,
   })
-<<<<<<< HEAD
   // Single exit funnel: `/exit`, double Ctrl+C, and external teardown all
   // land here. unmount() restores the terminal (cursor, raw mode, mouse
   // tracking); the explicit newlines afterwards keep the shell prompt from
