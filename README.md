@@ -118,6 +118,35 @@ compaction-basic（`/compact`）以及 dsh-working-activity（工作状态行，
 > 失败）；`subagent` 核心服务必须先于 spawn/fork 行挂载（base 层顺序已保证，
 > 在自己 insert 相关行时保持同样顺序）。
 
+## MCP
+
+官方 [`@deepseek-ai/dsh-mcp-client`](https://deepseek-harness.github.io/deepseek-harness/reference/config-catalog#deepseek-ai-dsh-mcp-client) 已提供完整 MCP 能力：每个配置行挂载一个服务器，其工具以 `mcp__<服务器>__<工具>` 名字注册进工具运行时，模型自动可用。
+在 profile 补丁层（`~/.dsh/profiles/cc-tui/cordis.patch.yml`）里 insert 即可：
+
+```yaml
+# stdio 服务器（本地命令）
+- insert:
+    - id: mcp-context7
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: context7
+        command: npx
+        args: ['-y', '@upstash/context7-mcp']
+
+# streamable-http 服务器（远程）
+- insert:
+    - id: mcp-remote
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: streamable-http
+        serverName: remote
+        url: https://example.com/mcp
+        headers: { Authorization: !!js process.env.MCP_TOKEN }
+```
+
+`/mcp` 命令查看当前已连接服务器及其工具数。
+
 ## 快捷键
 
 | 键 | 功能 |
@@ -229,5 +258,5 @@ compaction-basic（`/compact`）以及 dsh-working-activity（工作状态行，
 - 退出时以进程退出收尾，不等待 agent 异步落盘（持久化由 persistence 插件兜底）。
 - DSH 的 `/permission`（沙箱模式切换）未适配：需要 approval 服务 + 审批 UI，
   当前 TUI 不消费审批流，刻意不挂（`/permissions` 仅说明现状）。
-- `/vim` `/connect` `/hooks` `/mcp` `/memory` 为 CC 同名占位：对应能力在 DSH
+- `/vim` `/connect` `/hooks` `/memory` 为 CC 同名占位：对应能力在 DSH
   侧无等价机制或未在本 leaf 挂载，命令会给出明确说明而非静默。

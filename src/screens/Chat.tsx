@@ -515,7 +515,7 @@ export function Chat({
         return true
       case 'mcp':
         setHelpOpen(false)
-        channel.pushLocal('/mcp', ['DSH 暂无 MCP 服务支持。'])
+        channel.pushLocal('/mcp', channel.mcpStatus())
         return true
       case 'memory':
         setHelpOpen(false)

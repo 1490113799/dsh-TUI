@@ -338,6 +338,8 @@ export interface Channel {
   /** Render a multi-line local report in the transcript (`/status`,
    *  `/doctor`, …): a `local` row plus one `local-output` row per line. */
   pushLocal(title: string, lines: readonly string[]): void
+  /** MCP server/tool status for /mcp: one line per server, or setup guidance. */
+  mcpStatus(): string[]
   /** Write the conversation transcript to `dsh-cc-export-<ts>.md` in the
    *  session cwd; returns the written path, or null on failure. */
   exportSession(): string | null
@@ -458,6 +460,8 @@ export interface ChannelState {
   compact(): void
   /** Multi-line local report (`/status`, `/doctor`, …). */
   pushLocal(title: string, lines: readonly string[]): void
+  /** MCP server/tool status for /mcp: one line per server, or setup guidance. */
+  mcpStatus(): string[]
   /** Export the transcript to a markdown file (CC's /export). */
   exportSession(): string | null
   /** Create `AGENTS.md` in the session cwd (CC's /init). */
@@ -1535,6 +1539,38 @@ export function createChannel(
         })
       }
       state.emit()
+    },
+    mcpStatus() {
+      // MCP tools land on the tool runtime under mcp__<server>__<tool>
+      // public names (dsh-mcp-client's naming contract); group by server.
+      const runtime = ctx.get('tools') as
+        | { schemas(scope?: unknown): readonly { name: string; description: string }[] }
+        | undefined
+      const schemas = runtime?.schemas() ?? []
+      const byServer = new Map<string, string[]>()
+      for (const schema of schemas) {
+        const match = schema.name.match(/^mcp__([a-z0-9-]+)__(.+)$/)
+        if (!match) continue
+        const list = byServer.get(match[1]) ?? []
+        list.push(match[2])
+        byServer.set(match[1], list)
+      }
+      if (byServer.size === 0) {
+        return [
+          '未配置 MCP 服务器。',
+          '在 profile 补丁层（~/.dsh/profiles/cc-tui/cordis.patch.yml）insert 一行即可，例：',
+          '  - insert:',
+          '      - id: mcp-context7',
+          "        name: '@deepseek-ai/dsh-mcp-client'",
+          '        config: { transport: stdio, serverName: context7, command: npx, args: ["-y", "@upstash/context7-mcp"] }',
+          '详见仓库 README 的 MCP 章节。',
+        ]
+      }
+      const lines: string[] = []
+      for (const [server, tools] of byServer) {
+        lines.push(`${server}（${tools.length} 个工具）: ${tools.join('、')}`)
+      }
+      return lines
     },
     exportSession() {
       // Export from the session log — the authoritative, complete record —

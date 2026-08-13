@@ -325,6 +325,8 @@ export interface Channel {
     /** Render a multi-line local report in the transcript (`/status`,
      *  `/doctor`, …): a `local` row plus one `local-output` row per line. */
     pushLocal(title: string, lines: readonly string[]): void;
+    /** MCP server/tool status for /mcp: one line per server, or setup guidance. */
+    mcpStatus(): string[];
     /** Write the conversation transcript to `dsh-cc-export-<ts>.md` in the
      *  session cwd; returns the written path, or null on failure. */
     exportSession(): string | null;
@@ -452,6 +454,8 @@ export interface ChannelState {
     compact(): void;
     /** Multi-line local report (`/status`, `/doctor`, …). */
     pushLocal(title: string, lines: readonly string[]): void;
+    /** MCP server/tool status for /mcp: one line per server, or setup guidance. */
+    mcpStatus(): string[];
     /** Export the transcript to a markdown file (CC's /export). */
     exportSession(): string | null;
     /** Create `AGENTS.md` in the session cwd (CC's /init). */
