@@ -1,4 +1,7 @@
 import React from 'react'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Box, Text, useAnimationFrame, useTerminalSize } from '../ui.js'
 import { getTheme } from '../theme.js'
 import { useTheme } from './design-system/ThemeProvider.js'
@@ -8,7 +11,19 @@ import { BRAND, FLASH, ICE, PALE, sweep } from './shimmer.js'
 import { STANDARD_FRAME_INDEX, WhaleArt } from './Whale.js'
 import { OPENING_SEQUENCE } from './whaleFrames.js'
 
-const VERSION = '0.1.0'
+/**
+ * Header badge version, read from the installed package.json so the display
+ * never drifts from the published version. Falls back to a literal when the
+ * package metadata is unreadable (unusual layouts).
+ */
+const VERSION = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'package.json')
+    return (JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }).version ?? '0.1.0'
+  } catch {
+    return '0.1.0'
+  }
+})()
 
 /** Below this width the whale hides and the header goes text-only. */
 const WHALE_MIN_COLUMNS = 64
