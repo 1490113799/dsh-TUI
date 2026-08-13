@@ -88,11 +88,15 @@ export type Theme = {
   rainbow_violet_shimmer: string
 }
 
-/** The supported theme names, in display order. */
+/** The built-in theme names, in display order. */
 export const THEME_NAMES = ['dark', 'dark-ansi', 'light'] as const
 
-/** A renderable theme. Always resolvable to a concrete color palette. */
-export type ThemeName = (typeof THEME_NAMES)[number]
+/**
+ * Any theme name: a built-in palette (`light`/`dark`/`dark-ansi`) or a user
+ * theme from ~/.dsh-cc/themes/<name>.json. Always resolvable to a concrete
+ * color palette via getTheme() (unknown names fall back to `dark`).
+ */
+export type ThemeName = string
 
 const rgb = (hex: string): string => {
   const n = parseInt(hex.slice(1), 16)
@@ -257,6 +261,10 @@ const lightTheme: Theme = {
 /**
  * Dark ANSI theme using only the 16 standard ANSI colors, for terminals
  * without true color support (verbatim from the leak).
+ *
+ * User themes (JSON files in ~/.dsh-cc/themes/) overlay one of these three
+ * bases — see customTheme.ts. `getTheme` resolves them through a resolver
+ * registered by ThemeProvider.
  */
 const darkAnsiTheme: Theme = {
   autoAccept: 'ansi:magentaBright',
@@ -332,7 +340,7 @@ const darkAnsiTheme: Theme = {
 
 /**
  * Resolve a theme name to its concrete color palette.
- * @param themeName - The theme to resolve.
+ * @param themeName - The theme to resolve (built-in or user theme name).
  * @returns The matching palette; unknown names fall back to `dark`.
  */
 export function getTheme(themeName: ThemeName): Theme {
@@ -342,8 +350,27 @@ export function getTheme(themeName: ThemeName): Theme {
     case 'dark-ansi':
       return darkAnsiTheme
     default:
-      return darkTheme
+      return customThemeResolver?.(themeName) ?? darkTheme
   }
+}
+
+/**
+ * Resolver that maps a user theme name to a fully built palette (see
+ * customTheme.ts). Wired by ThemeProvider at startup so non-React rendering
+ * (markdown inline code) resolves user themes through getActiveTheme().
+ */
+let customThemeResolver: ((name: string) => Theme | undefined) | undefined
+
+/**
+ * Register the custom-theme resolver. Called once by ThemeProvider; the
+ * resolver must return `undefined` for names it does not know so getTheme
+ * falls back to `dark`.
+ * @param resolver - Resolves a user theme name to a built palette.
+ */
+export function registerCustomThemeResolver(
+  resolver: (name: string) => Theme | undefined,
+): void {
+  customThemeResolver = resolver
 }
 
 /**
@@ -355,7 +382,7 @@ let activeThemeName: ThemeName = 'dark'
 
 /**
  * Set the module-level active theme; ThemeProvider calls this once
- * background detection settles.
+ * background detection settles and on every runtime theme switch.
  * @param name - The theme to activate.
  */
 export function setActiveThemeName(name: ThemeName): void {

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Text, useInput, ScrollBox, type ScrollBoxHandle } from '../ui.js'
+import { Box, Text, useInput, ScrollBox, type ScrollBoxHandle, useTheme } from '../ui.js'
 import { POINTER } from '../cc/figures.js'
 import { formatTokens } from '../cc/format.js'
 import type { LlmModelInfo } from '@deepseek-ai/dsh-llm'
@@ -24,6 +24,7 @@ import { ActivityLine, contextPressurePct } from '../components/ActivityLine.js'
 import { ModelPicker } from '../components/ModelPicker.js'
 import { ResumePicker } from '../components/ResumePicker.js'
 import { ActivityPicker } from '../components/ActivityPicker.js'
+import { ThemePicker, getThemeOptions } from '../components/ThemePicker.js'
 import { FRAME_PRESETS, PRESET_NAMES } from '../components/activityFrames.js'
 import { ThinkingToggle } from '../components/ThinkingToggle.js'
 import { HistorySearchDialog } from '../components/HistorySearchDialog.js'
@@ -143,6 +144,10 @@ export function Chat({
   /** `/activity` indicator picker (pi extension's interactive select). */
   const [activityPickerOpen, setActivityPickerOpen] = React.useState(false)
   const [activityIndex, setActivityIndex] = React.useState(0)
+  /** `/theme` color-theme picker (built-ins + ~/.dsh-cc/themes user themes). */
+  const [themePickerOpen, setThemePickerOpen] = React.useState(false)
+  const [themeIndex, setThemeIndex] = React.useState(0)
+  const [themeName, setTheme] = useTheme()
   /** `/new` confirmation: a conversation with content needs a second `/new`
    *  (CC asks before discarding). Auto-disarms after a few seconds. */
   const newConfirmRef = React.useRef(false)
@@ -306,6 +311,37 @@ export function Chat({
         setHelpOpen(false)
         setActivityIndex(Math.max(0, PRESET_NAMES.indexOf(channel.activityFrames ?? 'random')))
         setActivityPickerOpen(true)
+        return true
+      }
+      case 'theme': {
+        // Bare `/theme` opens the interactive color picker (built-in
+        // palettes + user themes from ~/.dsh-cc/themes); `/theme <名字>`
+        // switches directly; `/theme status` shows the current choice.
+        // Selection persists to ~/.dsh-cc/theme.json and hot swaps via the
+        // ThemeProvider setter (CC_TUI_THEME still wins on next launch).
+        const parts = rawInput.trim().split(/\s+/).filter(Boolean)
+        if (parts[0] === 'status') {
+          setHelpOpen(false)
+          channel.pushLocal('/theme', [
+            `当前主题  ${themeName}`,
+            '切换      /theme（选择器）或 /theme <名字>',
+            '持久化    ~/.dsh-cc/theme.json（重启后仍生效；CC_TUI_THEME 优先）',
+            '自定义    ~/.dsh-cc/themes/<名字>.json（见 README「自定义主题」）',
+          ])
+          return true
+        }
+        if (parts.length > 0) {
+          setHelpOpen(false)
+          const ok = setTheme(parts[0])
+          channel.notify(
+            ok ? `主题已切换：${parts[0]}（已保存）` : `未知主题「${parts[0]}」· /theme 查看全部`,
+            { color: ok ? 'success' : 'error' },
+          )
+          return true
+        }
+        setHelpOpen(false)
+        setThemeIndex(Math.max(0, getThemeOptions().findIndex(option => option.value === themeName)))
+        setThemePickerOpen(true)
         return true
       }
       case 'new': {
@@ -879,6 +915,27 @@ export function Chat({
       }
       return
     }
+    if (themePickerOpen) {
+      const options = getThemeOptions()
+      if (key.upArrow) {
+        setThemeIndex(index => (index <= 0 ? options.length - 1 : index - 1))
+      } else if (key.downArrow) {
+        setThemeIndex(index => (index >= options.length - 1 ? 0 : index + 1))
+      } else if (key.return) {
+        setThemePickerOpen(false)
+        const name = options[themeIndex]?.value
+        if (name !== undefined) {
+          const ok = setTheme(name)
+          channel.notify(
+            ok ? `主题已切换：${name}（已保存）` : `主题「${name}」切换失败（无法写入 ~/.dsh-cc/theme.json）`,
+            { color: ok ? 'success' : 'error' },
+          )
+        }
+      } else if (key.escape) {
+        setThemePickerOpen(false)
+      }
+      return
+    }
     if (historyOpen) {
       if (key.escape) {
         setHistoryOpen(false)
@@ -1033,7 +1090,7 @@ export function Chat({
   /** Prompt input is inert while a modal dialog owns the keyboard. */
   const promptSelectionActive =
     selectionActive || modelPickerOpen || resumePickerOpen || activityPickerOpen ||
-    thinkingOpen || historyOpen || rewindOpen || searchOpen
+    themePickerOpen || thinkingOpen || historyOpen || rewindOpen || searchOpen
 
   return (
     <Box flexDirection="column" flexGrow={1} width="100%">
@@ -1155,6 +1212,11 @@ export function Chat({
             focusIndex={activityIndex}
             currentPreset={channel.activityFrames}
           />
+        </Box>
+      )}
+      {themePickerOpen && (
+        <Box flexDirection="column" marginTop={1}>
+          <ThemePicker focusIndex={themeIndex} currentTheme={themeName} />
         </Box>
       )}
       {historyOpen && (

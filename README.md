@@ -118,6 +118,50 @@ compaction-basic（`/compact`）以及 dsh-working-activity（工作状态行，
 > 失败）；`subagent` 核心服务必须先于 spawn/fork 行挂载（base 层顺序已保证，
 > 在自己 insert 相关行时保持同样顺序）。
 
+## 自定义主题
+
+除了内置的 `light` / `dark` / `dark-ansi` 三套 Gentle Mist Blue 调色板，
+还可以放 JSON 主题文件到 `~/.dsh-cc/themes/`，用任意 Theme 键覆盖基底色板：
+
+```json
+{
+  "name": "sakura",
+  "displayName": "樱花粉",
+  "base": "dark",
+  "colors": {
+    "claude": "#FF9EC7",
+    "claudeShimmer": "#FFC0D5",
+    "permission": "#FFB3CC",
+    "promptBorder": "#B08B99",
+    "text": "#E8E6E0",
+    "inactive": "#A99BA0",
+    "subtle": "#8A7A80",
+    "selectionBg": "#5C3A44",
+    "success": "#9CC7A8",
+    "error": "#E08591",
+    "warning": "#E0C08A"
+  }
+}
+```
+
+- **目录**：`~/.dsh-cc/themes/<名字>.json`，每个文件一个主题；文件名即主题名
+  （除非文件内声明了 `name`，此时以 `name` 为准，文件名退化为加载别名）。
+- **字段**：`base` 必填（`light`/`dark`/`dark-ansi`，选定被覆盖的基底色板）；
+  `colors` 是 Theme 键的子集覆盖（全部键名见 `src/theme.ts` 的 `Theme` 类型）；
+  `displayName` 用于选择器显示，缺省取 `name`；`name` 缺省取文件名。
+- **校验规则**：颜色值接受 `#rgb` / `#rrggbb` / `#rrggbbaa`、`rgb(r,g,b)`、
+  `ansi256(n)` 与 16 个 `ansi:` 命名色（与内置色板及 Ink 色彩引擎同款格式）。
+  未知键、非法色值 → 跳过该键并警告（stderr），不影响文件其余部分；`base`
+  非法、JSON 损坏、`colors` 不是对象 → 整个文件跳过并警告，TUI 不会崩。
+- **启用**：`/theme` 打开选择器（内置在前、自定义在后，每行带 base 标注与
+  三个关键色块预览），Enter 选中即**立即热切换**并写入
+  `~/.dsh-cc/theme.json`；也可 `/theme <名字>` 直接切换、`/theme status`
+  查看当前主题。重启后持久化选择仍生效。
+- **优先级**：`CC_TUI_THEME`（环境变量，内置名或自定义名）> 持久化选择
+  `~/.dsh-cc/theme.json` > OSC 11 终端背景自动检测。环境变量或持久化指向
+  不存在的主题时警告并忽略，自动检测照常兜底；两者都未设置时保持原有
+  自动检测行为。
+
 ## MCP
 
 官方 [`@deepseek-ai/dsh-mcp-client`](https://deepseek-harness.github.io/deepseek-harness/reference/config-catalog#deepseek-ai-dsh-mcp-client) 已提供完整 MCP 能力：每个配置行挂载一个服务器，其工具以 `mcp__<服务器>__<工具>` 名字注册进工具运行时，模型自动可用。
@@ -192,7 +236,7 @@ compaction-basic（`/compact`）以及 dsh-working-activity（工作状态行，
 |---|---|
 | 会话 | `/new` 新会话 · `/resume` 恢复 · `/clear` 清屏 · `/compact` 压缩 · `/export` 导出 Markdown |
 | 状态 | `/status` 会话信息 · `/cost` token 用量 · `/doctor` 环境自检 · `/config` 配置来源 · `/init` 创建 AGENTS.md |
-| 模型 | `/model` 选择器 · `/thinking` 思考显示 · `/tokens` token 明细 |
+| 模型 | `/model` 选择器 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 |
 | 账号/策略 | `/login` 凭证状态 · `/logout` 登出说明 · `/permissions` 权限说明 · `/add-dir` 文件策略范围 · `/hooks` · `/mcp` · `/memory` |
 | 技能 | `/audit` 代码审计 · `/bug` bug 报告 · `/review` 代码评审 · `/practice` 编程练习 · `/pr_comments` PR 评论 · `/release-notes` 发布说明 · `/vuln-check` 漏洞检查 |
 | 其它 | `/agents` 子代理列表 · `/vim` · `/terminal-setup` · `/connect` · `/help` · `/exit` |
@@ -213,7 +257,8 @@ compaction-basic（`/compact`）以及 dsh-working-activity（工作状态行，
   中性灰。启动时查询终端背景色（OSC 11）自动选色：浅色终端用严格的
   Gentle Mist Blue 色卡（墨色 `#343945` 正文 + 暖米白家族），深色终端用
   雾蓝适配版（暖灰白 `#E8E6E0` 正文 + 柔雾蓝 accent）；终端不响应时回退
-  深色。`CC_TUI_THEME=light|dark|dark-ansi` 可钉死配色并跳过检测。
+  深色。`CC_TUI_THEME=light|dark|dark-ansi` 可钉死配色并跳过检测；也支持
+  `~/.dsh-cc/themes/` 下的用户自定义主题（见「自定义主题」章节）。
 - **事件驱动渲染**：`session/event` 事件流 → 增量差分渲染，滚动状态独立维护。
 - **布局级虚拟化**：布局引擎是纯 JS 移植版 Yoga，每次提交都会全树重排——
   长会话的每帧成本随记录线性增长（越用越卡的根因）。消息列表按可视窗口

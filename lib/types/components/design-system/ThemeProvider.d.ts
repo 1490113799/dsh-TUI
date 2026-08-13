@@ -1,9 +1,11 @@
 import React from 'react';
-import { type ThemeName } from '../../theme.js';
 export declare function ThemeProvider({ children, theme, }: {
     children: React.ReactNode;
-    theme?: ThemeName;
+    theme?: string;
 }): React.ReactNode;
-/** Resolves the active `ThemeName`. Returns `[themeName]` to match the leak's shape. */
-export declare function useTheme(): [ThemeName];
+/**
+ * Resolves the active theme name and the runtime setter. Returns
+ * `[themeName, setTheme]` — the first element matches the leak's shape.
+ */
+export declare function useTheme(): [string, (name: string) => boolean];
 //# sourceMappingURL=ThemeProvider.d.ts.map

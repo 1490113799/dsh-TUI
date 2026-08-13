@@ -4,7 +4,8 @@ import { ListItem } from './design-system/ListItem.js'
 
 export type SelectOption = {
   value: string
-  label: string
+  /** Row content; plain strings render inline, richer rows may carry color swatches. */
+  label: React.ReactNode
   description?: string
 }
 
