@@ -2,8 +2,14 @@
  * The questionnaire panel — Claude Code style ask-user-question UI for the
  * DSH user-interaction seam. One question per panel (progress header, header
  * chip, wrapped question text, optional detail, option list with focus
- * pointer and multi-select checkmarks, free-text "Other" mode), styled in
- * the cc-tui mist-blue design language.
+ * pointer and multi-select checkmarks), styled in the cc-tui mist-blue
+ * design language.
+ *
+ * The list's last row IS the free-text input (issue #9): no Tab, no mode
+ * switch — the view never changes. Typing while focused on a real option
+ * appends into that input row (single-select also attaches the option's
+ * label, so the answer can carry both `selected` and `custom`); focusing
+ * the input row itself and typing gives a pure custom answer.
  */
 
 import React from 'react'
@@ -46,79 +52,117 @@ export function AskUserQuestionPanel({
 }: AskUserQuestionPanelProps): React.ReactNode {
   const options = question.options ?? []
   const multiSelect = question.multiSelect === true
+  /** Rows: the real options plus the inline input row at the tail. */
+  const rowCount = options.length + 1
   const [focusIndex, setFocusIndex] = React.useState(0)
   const [checked, setChecked] = React.useState<ReadonlySet<number>>(() => new Set())
-  const [mode, setMode] = React.useState<'options' | 'custom'>(options.length > 0 ? 'options' : 'custom')
   const [customText, setCustomText] = React.useState('')
   const [customCursor, setCustomCursor] = React.useState(0)
+  /** Single-select label captured by typing on a focused option — submitted
+   *  together with the custom text when the input row itself is Entered. */
+  const [attached, setAttached] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
+  const inputFocused = focusIndex === options.length
+
   const moveFocus = (delta: 1 | -1): void => {
-    if (options.length <= 1) return
-    setFocusIndex(index => (index + delta + options.length) % options.length)
+    if (rowCount <= 1) return
+    setFocusIndex(index => (index + delta + rowCount) % rowCount)
+    setError(null)
   }
 
+  /** Append at the text tail (option-row typing has no visible cursor). */
+  const appendText = (text: string): void => {
+    setCustomText(previous => previous + text)
+    setCustomCursor(previous => previous + text.length)
+    setError(null)
+  }
+
+  /** Drop the character before the cursor; empty text drops the attach. */
+  const backspaceText = (): void => {
+    if (customCursor <= 0) return
+    setCustomText(previous => {
+      const next = previous.slice(0, customCursor - 1) + previous.slice(customCursor)
+      if (next === '') setAttached(null)
+      return next
+    })
+    setCustomCursor(cursor => cursor - 1)
+  }
+
+  const checkedLabels = (): string[] =>
+    [...checked].sort((a, b) => a - b).map(index => options[index]?.label)
+      .filter((label): label is string => label !== undefined)
+
+  /** Enter on a real option: the option(s) plus whatever the input row holds. */
   const submitOptions = (): void => {
+    const text = customText.trim()
     if (multiSelect) {
-      const selected = [...checked].sort((a, b) => a - b).map(index => options[index]?.label)
-        .filter((label): label is string => label !== undefined)
-      if (selected.length === 0) {
-        setError('至少选择一个选项，或按 Tab 输入自定义回答')
+      const selected = checkedLabels()
+      if (selected.length === 0 && text === '') {
+        setError('至少选择一个选项，或在最后一行输入回答')
         return
       }
-      onAnswer({ selected })
+      onAnswer({ selected, ...(text !== '' ? { custom: text } : {}) })
       return
     }
     const label = options[focusIndex]?.label
     if (label === undefined) {
-      setError('至少选择一个选项，或按 Tab 输入自定义回答')
+      setError('至少选择一个选项，或在最后一行输入回答')
       return
     }
-    onAnswer({ selected: [label] })
+    onAnswer({ selected: [label], ...(text !== '' ? { custom: text } : {}) })
   }
 
-  const submitCustom = (): void => {
-    const custom = customText.trim()
-    if (custom === '') {
+  /** Enter on the input row itself: the text, plus the attached label (or
+   *  the checked labels for multi-select) when there is one. */
+  const submitInput = (): void => {
+    const text = customText.trim()
+    if (multiSelect) {
+      const selected = checkedLabels()
+      if (selected.length === 0 && text === '') {
+        setError('输入回答或勾选选项后再提交')
+        return
+      }
+      onAnswer({ selected, ...(text !== '' ? { custom: text } : {}) })
+      return
+    }
+    if (text === '') {
       setError('先输入回答内容再提交')
       return
     }
-    const selected = multiSelect
-      ? [...checked].sort((a, b) => a - b).map(index => options[index]?.label)
-          .filter((label): label is string => label !== undefined)
-      : []
-    onAnswer({ selected, custom })
+    onAnswer({ selected: attached !== null ? [attached] : [], custom: text })
   }
 
   useInput((input, key) => {
-    if (mode === 'custom') {
-      if (key.escape) {
-        if (options.length > 0) {
-          setMode('options')
-          setError(null)
-        } else {
-          onCancel()
-        }
+    if (key.escape || (key.ctrl && input === 'c')) {
+      onCancel()
+      return
+    }
+
+    if (inputFocused) {
+      if (key.upArrow) {
+        moveFocus(-1)
         return
       }
-      if (key.ctrl && input === 'c') {
-        onCancel()
+      if (key.downArrow) {
+        moveFocus(1)
         return
       }
       if (key.return) {
-        submitCustom()
+        submitInput()
         return
       }
       if (key.backspace) {
-        if (customCursor > 0) {
-          setCustomText(text => text.slice(0, customCursor - 1) + text.slice(customCursor))
-          setCustomCursor(cursor => cursor - 1)
-        }
+        backspaceText()
         return
       }
       if (key.delete) {
         if (customCursor < customText.length) {
-          setCustomText(text => text.slice(0, customCursor) + text.slice(customCursor + 1))
+          setCustomText(text => {
+            const next = text.slice(0, customCursor) + text.slice(customCursor + 1)
+            if (next === '') setAttached(null)
+            return next
+          })
         }
         return
       }
@@ -141,15 +185,12 @@ export function AskUserQuestionPanel({
       if (!key.ctrl && !key.meta && input) {
         setCustomText(text => text.slice(0, customCursor) + input + text.slice(customCursor))
         setCustomCursor(cursor => cursor + input.length)
+        setError(null)
       }
       return
     }
 
-    // Options mode.
-    if (key.escape || (key.ctrl && input === 'c')) {
-      onCancel()
-      return
-    }
+    // A real option row.
     if (key.upArrow) {
       moveFocus(-1)
       return
@@ -159,7 +200,7 @@ export function AskUserQuestionPanel({
       return
     }
     if (key.tab) {
-      setMode('custom')
+      setFocusIndex(options.length)
       setError(null)
       return
     }
@@ -174,11 +215,57 @@ export function AskUserQuestionPanel({
     }
     if (key.return) {
       submitOptions()
+      return
+    }
+    if (key.backspace) {
+      // Edit the input row without leaving the option list.
+      if (customText !== '') backspaceText()
+      return
+    }
+    // Typing on an option appends into the input row; single-select also
+    // attaches this option's label so Enter carries label + text (#9).
+    if (!key.ctrl && !key.meta && input) {
+      appendText(input)
+      if (!multiSelect) setAttached(options[focusIndex]?.label ?? null)
     }
   }, { isActive: true })
 
   const remaining = total - answered
   const headerTitle = ` 📋 提问 · 第 ${position}/${total} 题${remaining > 1 ? ` · 还剩 ${remaining} 题` : ''} `
+
+  const cursorChar = customCursor < customText.length ? customText[customCursor] : ' '
+  const renderInputRow = (): React.ReactNode => (
+    <Box flexDirection="row" marginTop={inputFocused ? 1 : 0}>
+      <Box width={1} flexShrink={0}>
+        <Text color={inputFocused ? 'claude' : undefined} bold={inputFocused}>
+          {inputFocused ? POINTER : ' '}
+        </Text>
+      </Box>
+      <Box width={1} flexShrink={0}>
+        <Text color={inputFocused ? 'claude' : 'suggestion'}>{PENCIL}</Text>
+      </Box>
+      <Box flexDirection="row" marginLeft={1}>
+        <Text bold={inputFocused} color={inputFocused ? 'claude' : 'suggestion'}>
+          自定义回答
+        </Text>
+        {attached !== null && (
+          <Text color="suggestion">（附加：{attached}）</Text>
+        )}
+        <Text dimColor>：</Text>
+        {customText === '' && !inputFocused ? (
+          <Text dimColor>直接输入…</Text>
+        ) : (
+          <>
+            <Text wrap="wrap">{customText.slice(0, customCursor)}</Text>
+            {inputFocused
+              ? <Text inverse>{cursorChar}</Text>
+              : <Text color="suggestion">▏</Text>}
+            <Text wrap="wrap">{customText.slice(inputFocused ? customCursor + 1 : customCursor)}</Text>
+          </>
+        )}
+      </Box>
+    </Box>
+  )
 
   const renderOptions = (): React.ReactNode => (
     <Box flexDirection="column" marginTop={1}>
@@ -210,44 +297,22 @@ export function AskUserQuestionPanel({
           </Box>
         )
       })}
+      {renderInputRow()}
     </Box>
   )
 
-  const renderCustom = (): React.ReactNode => {
-    const cursorChar = customCursor < customText.length ? customText[customCursor] : ' '
-    return (
-      <Box flexDirection="column" marginTop={1}>
-        <Box flexDirection="row">
-          <Text color="suggestion" bold>
-            {PENCIL}{' '}
-          </Text>
-          <Text color="claude" bold>
-            自定义回答
-          </Text>
-        </Box>
-        <Box flexDirection="row" marginTop={1}>
-          <Text wrap="wrap">
-            {customText.slice(0, customCursor)}
-          </Text>
-          <Text inverse>{cursorChar}</Text>
-          <Text wrap="wrap">
-            {customText.slice(customCursor + 1)}
-          </Text>
-        </Box>
-      </Box>
-    )
-  }
-
-  const hintParts = mode === 'custom'
+  const hintParts = inputFocused
     ? [
+        '输入回答',
         'Enter 提交',
-        ...(options.length > 0 ? ['Esc 返回选项'] : ['Esc 取消']),
+        ...(options.length > 0 ? ['↑ 返回选项'] : []),
+        'Esc 中断',
         ...(multiSelect && checked.size > 0 ? [`已选 ${checked.size}`] : []),
       ]
     : [
         '↑/↓ 选择',
         ...(multiSelect ? ['Space 多选'] : []),
-        ...(options.length > 0 ? ['Tab 自定义'] : []),
+        '输入文字附带回答',
         'Enter 提交',
         'Esc 中断',
         ...(multiSelect && checked.size > 0 ? [`已选 ${checked.size}`] : []),
@@ -255,7 +320,7 @@ export function AskUserQuestionPanel({
 
   return (
     <Box flexDirection="column" marginTop={1} paddingLeft={2} paddingRight={2} width="100%">
-      <Divider color="permission" title={headerTitle} />
+      <Divider color="permission" title={headerTitle} padding={4} />
       <Box flexDirection="column" marginTop={1}>
         {question.header !== undefined && (
           <Text color="suggestion" bold>
@@ -275,7 +340,7 @@ export function AskUserQuestionPanel({
           </Box>
         )}
       </Box>
-      {mode === 'custom' ? renderCustom() : renderOptions()}
+      {renderOptions()}
       {error !== null && (
         <Box marginTop={1}>
           <Text color="error">{error}</Text>

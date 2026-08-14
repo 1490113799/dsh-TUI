@@ -162,6 +162,9 @@ importers:
       '@types/semver':
         specifier: ^7.0.0
         version: 7.8.0
+      '@xterm/headless':
+        specifier: ^6.0.0
+        version: 6.0.0
       tsx:
         specifier: ^4.0.0
         version: 4.23.12
@@ -694,6 +697,9 @@ packages:
 
   '@types/semver@7.8.0':
     resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
+
+  '@xterm/headless@6.0.0':
+    resolution: {integrity: sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -1414,6 +1420,8 @@ snapshots:
       csstype: 3.2.3
 
   '@types/semver@7.8.0': {}
+
+  '@xterm/headless@6.0.0': {}
 
   ansi-regex@5.0.1: {}
 

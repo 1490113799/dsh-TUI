@@ -71,9 +71,10 @@ function clip(text: string, max = 140): string {
 function buildSummary(pending: PendingQuestion): QuestionSummary {
   const lines = pending.answers.map(answer => {
     const question = pending.request.questions.find(q => q.id === answer.id)
+    const labels = answer.selected.join('、')
     const text = answer.custom !== undefined && answer.custom !== ''
-      ? answer.custom
-      : answer.selected.join('、')
+      ? labels === '' ? answer.custom : `${labels}：${answer.custom}`
+      : labels
     return `· ${question?.question ?? answer.id} → ${clip(text)}`
   })
   const total = pending.request.questions.length

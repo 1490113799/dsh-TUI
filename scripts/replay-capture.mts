@@ -1,8 +1,8 @@
 /** Replay a `script` pty capture through xterm-headless and dump the screen. */
 const [{ Terminal: XTerm }, fs] = await Promise.all([import('@xterm/headless'), import('node:fs')])
 
-const COLS = 100
-const ROWS = 95
+const COLS = Number(process.env.COLS ?? 100)
+const ROWS = Number(process.env.ROWS ?? 95)
 let data = fs.readFileSync('/tmp/cap-tui.bin', 'utf8')
 // strip script(1) header/footer (everything up to the first ESC byte is header)
 const firstEsc = data.indexOf('\x1b')

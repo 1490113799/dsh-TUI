@@ -2,8 +2,14 @@
  * The questionnaire panel — Claude Code style ask-user-question UI for the
  * DSH user-interaction seam. One question per panel (progress header, header
  * chip, wrapped question text, optional detail, option list with focus
- * pointer and multi-select checkmarks, free-text "Other" mode), styled in
- * the cc-tui mist-blue design language.
+ * pointer and multi-select checkmarks), styled in the cc-tui mist-blue
+ * design language.
+ *
+ * The list's last row IS the free-text input (issue #9): no Tab, no mode
+ * switch — the view never changes. Typing while focused on a real option
+ * appends into that input row (single-select also attaches the option's
+ * label, so the answer can carry both `selected` and `custom`); focusing
+ * the input row itself and typing gives a pure custom answer.
  */
 import React from 'react';
 import type { QuestionSelection } from '../../questions.js';
