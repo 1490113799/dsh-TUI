@@ -139,7 +139,7 @@ export function StatusLine({
 
   const barWidth = columns - 4
   let bar: string | null = null
-  if (barWidth >= 14 && channel.contextWindow !== undefined) {
+  if (channel.contextBarEnabled && barWidth >= 14 && channel.contextWindow !== undefined) {
     bar = renderContextBar(
       channel.contextSegments,
       usage !== undefined ? usage.input + usage.cacheRead + usage.cacheWrite : 0,
