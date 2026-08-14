@@ -524,6 +524,12 @@ export function Chat({
         })()
         return true
       }
+      case 'rewind':
+        // Same picker as PromptInput's double-Esc on an empty input (CC
+        // rewind); `openRewind` notifies when there is nothing to rewind.
+        setHelpOpen(false)
+        openRewind()
+        return true
       case 'exit':
         onExit()
         return true
