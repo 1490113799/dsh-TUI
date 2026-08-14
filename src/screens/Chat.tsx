@@ -3,7 +3,7 @@ import { Box, Text, useInput, ScrollBox, type ScrollBoxHandle, useTheme } from '
 import { POINTER } from '../cc/figures.js'
 import { formatTokens } from '../cc/format.js'
 import type { LlmModelInfo } from '@deepseek-ai/dsh-llm'
-import type { Channel, ChatRow } from '../channel.js'
+import type { Channel, ChatRow, PresetOption } from '../channel.js'
 import type { QuestionStore } from '../questions.js'
 import { AskUserQuestionPanel } from '../components/questions/AskUserQuestionPanel.js'
 import type { DOMElement } from '../ink/dom.js'
@@ -24,6 +24,7 @@ import { ActivityLine, contextPressurePct } from '../components/ActivityLine.js'
 import { ModelPicker } from '../components/ModelPicker.js'
 import { ResumePicker } from '../components/ResumePicker.js'
 import { ActivityPicker } from '../components/ActivityPicker.js'
+import { PresetPicker } from '../components/PresetPicker.js'
 import { ThemePicker, getThemeOptions } from '../components/ThemePicker.js'
 import { FRAME_PRESETS, PRESET_NAMES } from '../components/activityFrames.js'
 import { ThinkingToggle } from '../components/ThinkingToggle.js'
@@ -144,6 +145,10 @@ export function Chat({
   /** `/activity` indicator picker (pi extension's interactive select). */
   const [activityPickerOpen, setActivityPickerOpen] = React.useState(false)
   const [activityIndex, setActivityIndex] = React.useState(0)
+  /** `/preset` agent-preset picker (issue #8): roster list loads async. */
+  const [presetPickerOpen, setPresetPickerOpen] = React.useState(false)
+  const [presetOptions, setPresetOptions] = React.useState<readonly PresetOption[]>([])
+  const [presetIndex, setPresetIndex] = React.useState(0)
   /** `/theme` color-theme picker (built-ins + ~/.dsh-cc/themes user themes). */
   const [themePickerOpen, setThemePickerOpen] = React.useState(false)
   const [themeIndex, setThemeIndex] = React.useState(0)
@@ -320,6 +325,43 @@ export function Chat({
         setHelpOpen(false)
         setActivityIndex(Math.max(0, PRESET_NAMES.indexOf(channel.activityFrames ?? 'random')))
         setActivityPickerOpen(true)
+        return true
+      }
+      case 'preset': {
+        // issue #8: bare `/preset` opens the roster picker (standard/code/
+        // minimal/cordis plus any user-authored presets); `/preset <id>`
+        // switches directly; `/preset status` shows the current choice. A
+        // blank session swaps composition in place (official blank-only
+        // rule); a started session is locked and the choice persists as the
+        // default for future sessions (~/.dsh-cc/agent-preset.json).
+        const parts = rawInput.trim().split(/\s+/).filter(Boolean)
+        if (parts[0] === 'status') {
+          setHelpOpen(false)
+          channel.pushLocal('/preset', [
+            `当前 preset  ${channel.agentPreset ?? '（未挂载名册）'}`,
+            '切换        /preset（选择器）或 /preset <id>',
+            '持久化      ~/.dsh-cc/agent-preset.json（重启后仍生效；cordis.yml preset 优先）',
+            '锁定规则    已开始的会话不可切换（官方 blank-only 规则）',
+          ])
+          return true
+        }
+        if (parts.length > 0) {
+          setHelpOpen(false)
+          void channel.switchPreset(parts[0])
+          return true
+        }
+        setHelpOpen(false)
+        setPresetPickerOpen(true)
+        void channel.listPresets().then((list) => {
+          if (list.length === 0) {
+            setPresetPickerOpen(false)
+            channel.notify('当前组合未挂载 agent-presets 名册（preset 不可用）', { color: 'warning' })
+            return
+          }
+          setPresetOptions(list)
+          const index = list.findIndex(preset => preset.id === channel.agentPreset)
+          setPresetIndex(index >= 0 ? index : 0)
+        })
         return true
       }
       case 'theme': {
@@ -924,6 +966,20 @@ export function Chat({
       }
       return
     }
+    if (presetPickerOpen) {
+      if (key.upArrow) {
+        setPresetIndex(index => (index <= 0 ? presetOptions.length - 1 : index - 1))
+      } else if (key.downArrow) {
+        setPresetIndex(index => (index >= presetOptions.length - 1 ? 0 : index + 1))
+      } else if (key.return) {
+        const option = presetOptions[presetIndex]
+        setPresetPickerOpen(false)
+        if (option) void channel.switchPreset(option.id)
+      } else if (key.escape) {
+        setPresetPickerOpen(false)
+      }
+      return
+    }
     if (themePickerOpen) {
       const options = getThemeOptions()
       if (key.upArrow) {
@@ -1106,7 +1162,7 @@ export function Chat({
   /** Prompt input is inert while a modal dialog owns the keyboard. */
   const promptSelectionActive =
     selectionActive || modelPickerOpen || resumePickerOpen || activityPickerOpen ||
-    themePickerOpen || thinkingOpen || historyOpen || rewindOpen || searchOpen
+    presetPickerOpen || themePickerOpen || thinkingOpen || historyOpen || rewindOpen || searchOpen
 
   return (
     <Box flexDirection="column" flexGrow={1} width="100%">
@@ -1233,6 +1289,15 @@ export function Chat({
             <ActivityPicker
               focusIndex={activityIndex}
               currentPreset={channel.activityFrames}
+            />
+          </Box>
+        )}
+        {presetPickerOpen && presetOptions.length > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            <PresetPicker
+              presets={presetOptions}
+              focusIndex={presetIndex}
+              currentPreset={channel.agentPreset}
             />
           </Box>
         )}

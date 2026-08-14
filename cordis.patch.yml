@@ -37,30 +37,94 @@
   config:
     agents: []
 
-# Compact at the standard 80% of the routed model's advertised context window
-# (compact-basic defaults; e.g. 800K of the 1M-token deepseek-v4-flash window)
-# with the standard 16% retained tail. Both remain overridable for tests and
-# must keep retainRatio < thresholdRatio (BasicCompactConfig validates this).
-- id: compaction-basic
-  config:
-    thresholdRatio: !!js parseFloat(process.env.CC_TUI_COMPACT_RATIO ?? '0.8')
-    retainRatio: !!js parseFloat(process.env.CC_TUI_COMPACT_RETAIN ?? '0.16')
+# ── agent presets (issue #8) ────────────────────────────────────────────────
+#
+# The model-facing plugin set moves INTO the agent-presets roster: every
+# session composes its tools/prompt sections from one preset directory
+# (standard/code/minimal/cordis) instead of the host rows below. The dsh CLI's
+# profile-boot sees this composition's `agent-presets` row and overlays the
+# shipped `config/agent-presets/` root onto it automatically, so the row here
+# carries no roots; `$DSH_HOME/.agent-presets` (user-authored presets) is
+# appended by the roster itself (`includeUserRoot` default). Mirroring the
+# official dsh-web-app patch: every dsh-base row a preset now owns is
+# disabled here, so a minimal agent does not leak host-layer tools (an agent's
+# registry view resolves agent → preset → global).
 
-# Delegation tools capped at depth 1 so the TUI's tool cards stay shallow
-# (the base default is depth 3).
+- id: agent-instructions
+  disabled: true
+
+- id: command-compact
+  disabled: true
+
+# compaction lives in the preset's own isolate realm (standard/code/cordis
+# carry `compaction-basic` with package defaults; minimal has none). The
+# CC_TUI_COMPACT_RATIO/CC_TUI_COMPACT_RETAIN tunables retired with this host
+# row — preset compositions own their compaction config.
+- id: compaction-basic
+  disabled: true
+
+- id: plan-mode
+  disabled: true
+
+- id: skill-filesystem
+  disabled: true
+
+- id: tool-bash
+  disabled: true
+
+- id: tool-fs
+  disabled: true
+
+- id: tool-fs-search
+  disabled: true
+
+- id: tool-goal
+  disabled: true
+
+- id: tool-jobs
+  disabled: true
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-ralph
+  disabled: true
+
+- id: tool-result-pruner
+  disabled: true
+
+- id: tool-skill
+  disabled: true
+
+- id: tool-str-replace-editor
+  disabled: true
+
+# Delegation tools (subagent spawn/fork, controls, workflows) are preset rows
+# now; the preset's `delegation` group re-adds them with package defaults, so
+# cc-tui's former depth-1 cap no longer applies.
 - id: tool-subagent
-  config:
-    provider: spawn
-    toolName: subagent
-    backgroundMode: continuable
-    maxDepth: 1
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
 
 - id: tool-subagent-fork
-  config:
-    provider: fork
-    toolName: subagent_fork
-    backgroundMode: continuable
-    maxDepth: 1
+  disabled: true
+
+- id: tool-subagent-list-agents
+  disabled: true
+
+- id: tool-todo
+  disabled: true
+
+- id: tool-web
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+- id: workflow-worker-thread
+  disabled: true
 
 # Windows has no sandbox confinement backend yet (sandbox-local's win32
 # chain is empty); use danger-full-access on Windows so bash commands can
@@ -92,6 +156,25 @@
 # `ctx.userQuestions`.
 
 - insert:
+    # The agent-preset roster (issue #8): `ctx.agentPresets`, the service the
+    # TUI composes every session's model-facing world from. No `roots` here —
+    # the dsh CLI's profile-boot overlays its shipped `config/agent-presets/`
+    # directory (standard/code/minimal/cordis, system trust) onto this row
+    # whenever a composition carries it, and the roster itself appends the
+    # user-authored `$DSH_HOME/.agent-presets` root. A boot that never reached
+    # profile-boot (bare `dsh --config cordis.yml`) leaves the roster empty;
+    # the TUI then keeps its pre-presets behavior (see presets.ts).
+    - id: agent-presets
+      name: '@deepseek-ai/dsh-agent-presets'
+      config:
+        default: standard
+
+    # Host-plane services the `cordis` preset's plugin-experimentation tool
+    # waits on (dynamicCordisRunner/cordisInspect); dsh-base carries no such
+    # row — the official web app inserts it the same way.
+    - id: cordis-host-runner
+      name: '@deepseek-ai/dsh-cordis-host-runner'
+
     # The interactive front door. The plugin creates/resumes its agent at
     # runtime, seeds the startup status line, and disposes the whole app tree
     # (exiting the process) when the TUI unmounts. `dsh-cc --resume` feeds
@@ -109,6 +192,10 @@
         # request headers replaces it after the first turn. Keep in sync with
         # the adapter's reasoningEffort below.
         effort: max
+        # Static preset choice (CC_TUI_PRESET overrides): wins over the
+        # persisted `/preset` preference (~/.dsh-cc/agent-preset.json), which
+        # wins over the roster default (standard).
+        preset: !!js process.env.CC_TUI_PRESET ?? undefined
         sessionId: !!js process.env.DSH_CC_RESUME_SESSION ?? undefined
 
     # Durable session log (DSH's own persistence seam): /resume and rewind

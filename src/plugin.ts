@@ -10,6 +10,8 @@ import { createChannel } from './channel.js'
 import { QuestionStore } from './questions.js'
 import { registerPackagedSkills } from './packaged-skills.js'
 import { readActivityFrames } from './activityPrefs.js'
+import { readPresetPref } from './presetPrefs.js'
+import { composePreset, resolvePersistedPreset, runningPresetOf } from './presets.js'
 import { writeResumeTarget } from './sessionHistory.js'
 import { Chat } from './screens/Chat.js'
 import { render, ThemeProvider, AlternateScreen } from './ui.js'
@@ -53,7 +55,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     model: config.model,
   }
   const meta = { cwd: config.cwd ?? process.cwd() }
-  const { agent, handle } = await resolveAgent(ctx, config.sessionId, agentOptions, meta)
+  const { agent, handle, agentPreset } = await resolveAgent(ctx, config.sessionId, agentOptions, meta, config.preset)
 
   const channel = createChannel(ctx, agent, {
     model: config.model ?? 'deepseek-v4-flash',
@@ -64,6 +66,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     // Explicit cordis.yml value (static deployment choice) wins over the
     // runtime `/activity` preference, which wins over the default.
     activityFrames: config.activityFrames ?? readActivityFrames() ?? 'claude',
+    // Same precedence for the agent preset: cordis.yml `preset` over the
+    // persisted `/preset` choice; undefined adopts the roster default.
+    configuredPreset: config.preset,
+    agentPreset,
     handle,
   })
   // Single exit funnel: `/exit`, double Ctrl+C, and external teardown all
@@ -141,23 +147,38 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
  * session log written by dsh-session-persistence-jsonl); a missing artifact
  * or unmounted backend falls back to a fresh session, as does a plain boot
  * without a session id.
+ *
+ * Preset composition (issue #8): a create resolves the requested preset
+ * (cordis.yml `preset` over the persisted `/preset` choice over the roster
+ * default) and mounts it in the factory's setup hook; a resume re-mounts the
+ * preset the session's own log records. Without the roster both paths behave
+ * as before presets existed.
  */
 async function resolveAgent(
   ctx: Context,
   requestedSessionId: string | undefined,
   agentOptions: { provider?: string; model?: string },
   meta: { cwd: string },
-): Promise<{ agent: Agent; handle?: AgentHandle }> {
+  configuredPreset?: string,
+): Promise<{ agent: Agent; handle?: AgentHandle; agentPreset?: string }> {
   if (requestedSessionId !== undefined) {
     const resumeId = SessionId(requestedSessionId)
     const existing = ctx.agents.get(resumeId)
-    if (existing !== undefined) return { agent: existing }
+    if (existing !== undefined) {
+      return { agent: existing, agentPreset: runningPresetOf(existing.session) }
+    }
     try {
+      // The resumed session keeps the preset its log records (last
+      // `agent-preset/selected` wins over the creation header), never the
+      // caller's current preference.
+      const persisted = await resolvePersistedPreset(ctx, resumeId)
+      const composed = await composePreset(ctx, persisted)
       const resumed = await ctx.agents.resume({
         resumeSessionId: resumeId,
         agentOptions,
+        ...(composed.setup === undefined ? {} : { setup: composed.setup }),
       })
-      return { agent: resumed.agent, handle: resumed }
+      return { agent: resumed.agent, handle: resumed, agentPreset: composed.agentPreset }
     } catch (error) {
       // No artifact (first run / cleared storage) or persistence not
       // mounted: fall through to a fresh session, but stay loud in the log.
@@ -167,7 +188,17 @@ async function resolveAgent(
     }
   }
   const sessionId = SessionId(randomUUID())
-  const created = await ctx.agents.create({ sessionId, meta, agentOptions }).catch((error: unknown) => {
+  const composed = await composePreset(ctx, configuredPreset ?? readPresetPref())
+  const created = await ctx.agents.create({
+    sessionId,
+    meta: {
+      ...meta,
+      // Durable header value: a later resume re-mounts exactly this preset.
+      ...(composed.agentPreset === undefined ? {} : { agentPreset: composed.agentPreset }),
+    },
+    agentOptions,
+    ...(composed.setup === undefined ? {} : { setup: composed.setup }),
+  }).catch((error: unknown) => {
     // Fail loud with the reason on stderr — a dead TUI with no message is
     // the worst outcome for a misconfigured leaf (unknown provider/model).
     const message = error instanceof Error ? error.message : String(error)
@@ -175,7 +206,7 @@ async function resolveAgent(
       `cc-tui: failed to create agent (provider=${agentOptions.provider ?? 'deepseek-official'}, model=${agentOptions.model ?? 'deepseek-v4-flash'}): ${message}`,
     )
   })
-  return { agent: created.agent, handle: created }
+  return { agent: created.agent, handle: created, agentPreset: composed.agentPreset }
 }
 
 /**

@@ -11,6 +11,8 @@ import { join } from 'node:path'
 import { LOCAL_COMMANDS, type LocalCommand } from './commands.js'
 import { clearResumeTarget, readLastUsed, touchSession, type SessionRecord, writeResumeTarget } from './sessionHistory.js'
 import { writeActivityFrames } from './activityPrefs.js'
+import { readPresetPref, writePresetPref } from './presetPrefs.js'
+import { composePreset, resolvePersistedPreset, rosterOf, runningPresetOf, serviceForAgent, type AgentPresetInfo } from './presets.js'
 import { isPresetName } from './components/activityFrames.js'
 import { existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -309,6 +311,17 @@ export interface Channel {
    *  current end and continues it with a new agent routed to `provider`/`model`.
    *  The history replays unchanged; only the request route changes. */
   switchModel(provider: string, model: string): Promise<boolean>
+  /** The preset the CURRENT session runs under (issue #8), resolved from its
+   *  log at create/resume time; undefined when no roster is mounted. */
+  readonly agentPreset: string | undefined
+  /** The roster's presets for the `/preset` picker (empty without a roster). */
+  listPresets(): Promise<readonly PresetOption[]>
+  /** Switch the agent preset (`/preset`): a blank session swaps composition
+   *  in place (official `recompose` + logged `agent-preset/selected`); a
+   *  started session is locked, so the choice persists as the default for
+   *  future sessions instead. False when the roster is absent, the id is
+   *  unknown/broken, or a turn is running. */
+  switchPreset(presetId: string): Promise<boolean>
   /** Reset the visible transcript (`/clear`). */
   clear(): void
   /**
@@ -351,6 +364,17 @@ export interface Channel {
   /** Subagent rows for `/agents` (DSH subagent service; empty message when
    *  the service is absent). */
   listSubagents(): Promise<string[]>
+}
+
+/** @internal */
+/** One roster entry in the `/preset` picker (see {@link Channel.listPresets}). */
+export interface PresetOption {
+  id: string
+  name?: string
+  description?: string
+  /** Present when the roster marked this preset unloadable (shown verbatim). */
+  broken?: string
+  isDefault: boolean
 }
 
 /** @internal */
@@ -446,6 +470,12 @@ export interface ChannelState {
   newSession(): Promise<boolean>
   /** Switch the live model (`/model` picker). */
   switchModel(provider: string, model: string): Promise<boolean>
+  /** The preset the current session runs under (see the public Channel type). */
+  agentPreset: string | undefined
+  /** The roster's presets for the `/preset` picker (see the public Channel type). */
+  listPresets(): Promise<readonly PresetOption[]>
+  /** Switch the agent preset (see the public Channel type). */
+  switchPreset(presetId: string): Promise<boolean>
   clear(): void
   /** @internal older-row restoration (see the public Channel.loadOlder). */
   loadOlder(): number
@@ -730,6 +760,11 @@ export function createChannel(
     /** Indicator preset for the working-activity line (`claude`/`moon`/
      *  `comet`/`dots`/… or `random`); default `claude`. */
     activityFrames?: string
+    /** cordis.yml's static preset choice (`preset` key): wins over the
+     *  persisted `/preset` preference for NEW sessions this channel starts. */
+    configuredPreset?: string
+    /** The preset the initial agent's session runs under (from resolveAgent). */
+    agentPreset?: string
     /** Handle of the initial agent; disposed when a rewind replaces it. */
     handle?: AgentHandle
   },
@@ -803,6 +838,7 @@ export function createChannel(
     workingActivity: undefined,
     activityFrames: options.activityFrames,
     activityEnabled: options.activity !== false,
+    agentPreset: options.agentPreset,
     goal: undefined,
     todos: [],
     loadedContext: undefined,
@@ -1018,6 +1054,10 @@ export function createChannel(
         return null
       }
       let handle: AgentHandle
+      // The fork continues under the source session's own preset: switches
+      // are blank-only, so every `agent-preset/selected` event predates any
+      // rewind boundary and the source log resolves the exact composition.
+      const rewindComposed = await composePreset(ctx, runningPresetOf(agent.session))
       try {
         handle = await agents.create({
           sessionId: childId,
@@ -1026,8 +1066,12 @@ export function createChannel(
             cwd: options.cwd,
             parentSession: agent.session.id,
             seedLength: seed.length,
+            ...(rewindComposed.agentPreset === undefined
+              ? {}
+              : { agentPreset: rewindComposed.agentPreset }),
           },
           agentOptions: { provider: options.provider, model: options.model },
+          ...(rewindComposed.setup === undefined ? {} : { setup: rewindComposed.setup }),
         })
       } catch {
         state.notify('Rewind failed — could not create the replacement session', { color: 'error' })
@@ -1053,6 +1097,7 @@ export function createChannel(
       state.spinnerMode = 'requesting'
       state.status = handle.agent.status
       state.agentId = handle.agent.id
+      state.agentPreset = rewindComposed.agentPreset
       state.tps = undefined
       state.tpsSamples = []
       state.lastUsage = undefined
@@ -1091,6 +1136,7 @@ export function createChannel(
           resume(options: {
             resumeSessionId: SessionId
             agentOptions?: { provider?: string; model?: string }
+            setup?: CreateAgentOptions['setup']
           }): Promise<AgentHandle>
         }
         | undefined
@@ -1099,10 +1145,18 @@ export function createChannel(
         return false
       }
       let handle: AgentHandle
+      // The target session's own preset (from its persisted log) — never the
+      // current preference: a resume re-enters the composition its history
+      // was produced under.
+      const resumeComposed = await composePreset(
+        ctx,
+        await resolvePersistedPreset(ctx, SessionId(sessionId)),
+      )
       try {
         handle = await agents.resume({
           resumeSessionId: SessionId(sessionId),
           agentOptions: { provider: options.provider, model: options.model },
+          ...(resumeComposed.setup === undefined ? {} : { setup: resumeComposed.setup }),
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -1129,6 +1183,7 @@ export function createChannel(
       state.spinnerMode = 'requesting'
       state.status = handle.agent.status
       state.agentId = handle.agent.id
+      state.agentPreset = resumeComposed.agentPreset
       state.tps = undefined
       state.tpsSamples = []
       state.lastUsage = undefined
@@ -1179,11 +1234,21 @@ export function createChannel(
       }
       const sessionId = SessionId(randomUUID())
       let handle: AgentHandle
+      // A fresh session composes the caller's DEFAULT preset: the cordis.yml
+      // `preset` key wins over the persisted `/preset` choice, which wins
+      // over the roster default (same precedence as activityFrames).
+      const newComposed = await composePreset(ctx, options.configuredPreset ?? readPresetPref())
       try {
         handle = await agents.create({
           sessionId,
-          meta: { cwd: options.cwd },
+          meta: {
+            cwd: options.cwd,
+            ...(newComposed.agentPreset === undefined
+              ? {}
+              : { agentPreset: newComposed.agentPreset }),
+          },
           agentOptions: { provider: options.provider, model: options.model },
+          ...(newComposed.setup === undefined ? {} : { setup: newComposed.setup }),
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -1211,6 +1276,7 @@ export function createChannel(
       state.spinnerMode = 'requesting'
       state.status = handle.agent.status
       state.agentId = handle.agent.id
+      state.agentPreset = newComposed.agentPreset
       state.tps = undefined
       state.tpsSamples = []
       state.lastUsage = undefined
@@ -1270,6 +1336,9 @@ export function createChannel(
       }
       const childId = SessionId(randomUUID())
       let handle: AgentHandle
+      // The forked conversation keeps the session's own preset — only the
+      // request route changes (same rule as rewindTo).
+      const modelComposed = await composePreset(ctx, runningPresetOf(agent.session))
       try {
         handle = await agents.create({
           sessionId: childId,
@@ -1278,8 +1347,12 @@ export function createChannel(
             cwd: options.cwd,
             parentSession: agent.session.id,
             seedLength: seed.length,
+            ...(modelComposed.agentPreset === undefined
+              ? {}
+              : { agentPreset: modelComposed.agentPreset }),
           },
           agentOptions: { provider, model },
+          ...(modelComposed.setup === undefined ? {} : { setup: modelComposed.setup }),
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -1304,6 +1377,7 @@ export function createChannel(
       state.spinnerMode = 'requesting'
       state.status = handle.agent.status
       state.agentId = handle.agent.id
+      state.agentPreset = modelComposed.agentPreset
       state.model = model
       state.provider = provider
       state.tps = undefined
@@ -1383,6 +1457,92 @@ export function createChannel(
       state.activityFrames = name
       state.emit()
       state.notify(`指示器已切换：${name}（已保存）`)
+      return true
+    },
+    async listPresets() {
+      const presets = rosterOf(ctx)
+      if (presets === undefined) return []
+      try {
+        const list = await presets.list()
+        return list.map(preset => ({
+          id: preset.id,
+          ...(preset.name === undefined ? {} : { name: preset.name }),
+          ...(preset.description === undefined ? {} : { description: preset.description }),
+          ...(preset.broken === undefined ? {} : { broken: preset.broken }),
+          isDefault: preset.id === presets.defaultId,
+        }))
+      } catch {
+        return []
+      }
+    },
+    async switchPreset(presetId) {
+      const presets = rosterOf(ctx)
+      if (presets === undefined) {
+        state.notify('Preset 不可用——当前组合未挂载 agent-presets 名册', { color: 'error' })
+        return false
+      }
+      if (state.working) {
+        state.notify('Agent 运行中，无法切换 preset', { color: 'warning' })
+        return false
+      }
+      let target: AgentPresetInfo
+      try {
+        target = await presets.resolve(presetId)
+      } catch (error) {
+        state.notify(
+          `Preset「${presetId}」不存在 · ${error instanceof Error ? error.message : String(error)}`,
+          { color: 'error', timeoutMs: 8000 },
+        )
+        return false
+      }
+      if (target.broken !== undefined) {
+        state.notify(`Preset「${presetId}」无法加载 · ${target.broken}`, { color: 'error', timeoutMs: 8000 })
+        return false
+      }
+      if (target.id === state.agentPreset) {
+        state.notify(`当前 preset 已是：${target.id}`, { color: 'success' })
+        return true
+      }
+      // Official rule (dsh-agent-presets): only a session that has produced
+      // nothing may swap compositions — a started session's logged tool calls
+      // would strand under a different tool set. Blank = no turn ever ran.
+      const blank = !agent.session.events.some(event => event.type === 'turn/start')
+      if (!blank) {
+        // Persist as the default for future sessions instead of failing.
+        if (!writePresetPref(target.id)) {
+          state.notify('无法写入 ~/.dsh-cc/agent-preset.json，选择未保存', { color: 'error' })
+          return false
+        }
+        state.notify(
+          `会话已开始，preset 已锁定（当前：${state.agentPreset ?? 'host'}）· 已保存为默认：${target.id}（/new 或下次启动生效）`,
+          { color: 'warning', timeoutMs: 8000 },
+        )
+        return true
+      }
+      try {
+        const preset = await presets.recompose(agent.ctx, target.id)
+        // The switch is a logged session fact (model-visible ⟺ logged):
+        // resumes/forks of this session resolve the NEW composition. The
+        // type is runtime-registered in dsh-session's known-event set but
+        // not yet in its typed SessionEventMap — cast the SESSION (never
+        // extract the method: `append` reads the private `this.log`, so an
+        // unbound call throws "Cannot read properties of undefined").
+        const session = agent.session as unknown as { append(type: string, data: unknown): void }
+        session.append('agent-preset/selected', { agentPreset: preset.id })
+        state.agentPreset = preset.id
+      } catch (error) {
+        state.notify(
+          `Preset 切换失败 · ${error instanceof Error ? error.message : String(error)}`,
+          { color: 'error', timeoutMs: 8000 },
+        )
+        return false
+      }
+      state.emit()
+      if (!writePresetPref(target.id)) {
+        state.notify(`Preset 已切换：${target.id}，但默认偏好写入失败（重启后不保留）`, { color: 'warning' })
+        return true
+      }
+      state.notify(`Preset 已切换：${target.id}（已保存为默认）`, { color: 'success' })
       return true
     },
     listModels() {
@@ -1477,9 +1637,10 @@ export function createChannel(
     compact() {
       // DSH compaction service key: `ctx.compaction` (dsh-compaction's
       // CompactionEngine; dsh-compaction-basic provides it in the example
-      // leaf).
-      const compactService = ctx.get('compaction') as
-        | {
+      // leaf). Under agent presets the engine lives in the preset's isolate
+      // realm, invisible from the root context — resolve through the agent's
+      // scope chain first (minimal composes NO compaction: stays unavailable).
+      const compactService = serviceForAgent<{
           // rc.6 signature: compactNow(agent: ManualCompactAgentContext,
           // signal, sourceCommandId?) — an Agent satisfies the context
           // (session/options/runMaintenance). The result shape is only used
@@ -1488,8 +1649,7 @@ export function createChannel(
             agent: unknown,
             signal: AbortSignal,
           ): Promise<unknown>
-        }
-        | undefined
+        }>(ctx, agent, 'compaction')
       if (!compactService) {
         state.notify('Compaction unavailable · no compaction service in this leaf', {
           color: 'warning',
@@ -1747,9 +1907,13 @@ export function createChannel(
       const discovered = await discoverBaselineInstructionFiles({ cwd: options.cwd })
       if (target !== agent) return
       files.push(...discovered.map(file => ({ displayPath: file.displayPath })))
-      const skillsService = ctx.get('skills') as
-        | { list(options?: unknown): Promise<readonly { name: string; description: string }[]> }
-        | undefined
+      // The skills registry is host-plane but scope-layered: preset rows
+      // (skill-filesystem) register into the preset's layer, so the catalog
+      // must be read through the agent's scope chain (serviceForAgent falls
+      // back to the host context when no roster is mounted).
+      const skillsService = serviceForAgent<{
+        list(options?: unknown): Promise<readonly { name: string; description: string }[]>
+      }>(ctx, target, 'skills')
       if (skillsService !== undefined) {
         const catalog = await skillsService.list({})
         if (target !== agent) return
@@ -2252,6 +2416,19 @@ ${output}
         state.todos = event.data.todos
         break
       default:
+        // Logged preset switch (blank sessions only, issue #8): a transcript
+        // marker so a replayed log shows which composition produced the
+        // turns after it. Not in dsh-session's typed union — matched here by
+        // name, the way `activity/status` is consumed in bindAgent.
+        if ((event as { type: string }).type === 'agent-preset/selected') {
+          const data = event.data as unknown as { agentPreset?: string }
+          state.rows.push({
+            id: nextRowId,
+            kind: 'notice',
+            text: `Agent preset 已切换：${data.agentPreset ?? 'unknown'}`,
+          })
+          nextRowId += 1
+        }
         break
     }
   }

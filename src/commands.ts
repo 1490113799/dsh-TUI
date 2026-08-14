@@ -38,6 +38,7 @@ export const LOCAL_COMMANDS: LocalCommand[] = [
   { name: 'agents', description: 'Show subagents of this session' },
   // Model / display
   { name: 'activity', description: 'Switch the working-activity indicator preset' },
+  { name: 'preset', description: 'Switch the agent preset (standard/code/minimal/cordis)' },
   { name: 'theme', description: 'Switch the color theme (built-in or custom)' },
   { name: 'model', description: 'Show the active model' },
   { name: 'thinking', description: 'Toggle extended thinking display' },

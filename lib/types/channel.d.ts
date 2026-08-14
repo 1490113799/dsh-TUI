@@ -293,6 +293,17 @@ export interface Channel {
      *  current end and continues it with a new agent routed to `provider`/`model`.
      *  The history replays unchanged; only the request route changes. */
     switchModel(provider: string, model: string): Promise<boolean>;
+    /** The preset the CURRENT session runs under (issue #8), resolved from its
+     *  log at create/resume time; undefined when no roster is mounted. */
+    readonly agentPreset: string | undefined;
+    /** The roster's presets for the `/preset` picker (empty without a roster). */
+    listPresets(): Promise<readonly PresetOption[]>;
+    /** Switch the agent preset (`/preset`): a blank session swaps composition
+     *  in place (official `recompose` + logged `agent-preset/selected`); a
+     *  started session is locked, so the choice persists as the default for
+     *  future sessions instead. False when the roster is absent, the id is
+     *  unknown/broken, or a turn is running. */
+    switchPreset(presetId: string): Promise<boolean>;
     /** Reset the visible transcript (`/clear`). */
     clear(): void;
     /**
@@ -338,6 +349,16 @@ export interface Channel {
     /** Subagent rows for `/agents` (DSH subagent service; empty message when
      *  the service is absent). */
     listSubagents(): Promise<string[]>;
+}
+/** @internal */
+/** One roster entry in the `/preset` picker (see {@link Channel.listPresets}). */
+export interface PresetOption {
+    id: string;
+    name?: string;
+    description?: string;
+    /** Present when the roster marked this preset unloadable (shown verbatim). */
+    broken?: string;
+    isDefault: boolean;
 }
 /** @internal */
 /** One user message submitted while the model was working, not yet claimed
@@ -437,6 +458,12 @@ export interface ChannelState {
     newSession(): Promise<boolean>;
     /** Switch the live model (`/model` picker). */
     switchModel(provider: string, model: string): Promise<boolean>;
+    /** The preset the current session runs under (see the public Channel type). */
+    agentPreset: string | undefined;
+    /** The roster's presets for the `/preset` picker (see the public Channel type). */
+    listPresets(): Promise<readonly PresetOption[]>;
+    /** Switch the agent preset (see the public Channel type). */
+    switchPreset(presetId: string): Promise<boolean>;
     clear(): void;
     /** @internal older-row restoration (see the public Channel.loadOlder). */
     loadOlder(): number;
@@ -489,6 +516,11 @@ export declare function createChannel(ctx: Context, initialAgent: Agent, options
     /** Indicator preset for the working-activity line (`claude`/`moon`/
      *  `comet`/`dots`/… or `random`); default `claude`. */
     activityFrames?: string;
+    /** cordis.yml's static preset choice (`preset` key): wins over the
+     *  persisted `/preset` preference for NEW sessions this channel starts. */
+    configuredPreset?: string;
+    /** The preset the initial agent's session runs under (from resolveAgent). */
+    agentPreset?: string;
     /** Handle of the initial agent; disposed when a rewind replaces it. */
     handle?: AgentHandle;
 }): ChannelState;

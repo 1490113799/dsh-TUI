@@ -36,6 +36,11 @@ export interface Config {
     activityFrames?: string;
     /** Run in the terminal's alternate screen (Claude Code fullscreen layout). */
     fullscreen?: boolean;
+    /** Agent preset id new sessions compose from (standard/code/minimal/
+     *  cordis/… when the roster is mounted). When absent, the `/preset` choice
+     *  persisted in `~/.dsh-cc/agent-preset.json` wins, then the roster
+     *  default (`standard`). */
+    preset?: string;
 }
 export declare const Config: Schema<Config>;
 /**
